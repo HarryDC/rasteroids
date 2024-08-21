@@ -45,26 +45,38 @@ static Vector2 shipData[4] = {
         {1.0f, 1.0f},
         {-1.0f, 1.0f},
 };
-static Vector2 shipVertices[4] = { 0 };
 
 static float shipRotationFactor = 1.0f;
 static float shipAccelartionFactor = .1f;
-static float shipDecelrationFactor = .99;
-static float shipMaxSpeed = 1.0;
-static float shipSpeedCutoff = 0.05;
+static float shipDecelrationFactor = .99f;
+static float shipMaxSpeed = 1.0f;
+static float shipSpeedCutoff = 0.05f;
 
 //----------------------------------------------------------------------------------
 // Bullet Definition
 //---------------------------------------------------------------------------------- 
+static Vector2 bullet_data[5] = {
+        {-0.1f, -0.1f},
+        {0.1f, -0.1f},
+        {0.1f, 0.1f},
+        {-0.1f, 0.1f},
+        {-0.1f, -0.1f}
+};
+static const int bullet_vertex_count = 5;
 
 #define MAX_BULLETS 5
 typedef struct Bullet {
-    int object_num;
-    int life_time;
+    int objectNum;
+    float lifetime;
 } Bullet;
 
 static Bullet bullets[MAX_BULLETS] = { 0 };
 
+static float bulletInitialLifetime = 5; // seconds
+static float bulletInitialVelocity = 2.0f;
+
+static float lastCallTime = 0.0f;
+static float dt = 0.0f;
 //----------------------------------------------------------------------------------
 // Objects Definition
 //----------------------------------------------------------------------------------
@@ -73,8 +85,8 @@ static const Vector2 yUp = { 0, -1 };
 
 typedef struct Object {
     bool active;
-    int vertexCount;
-    Vector2* initialVertices;
+    int vertex_count;
+    Vector2* initial_vertices;
     Vector2* vertices;
     Vector2 position;
     float rot;
@@ -82,23 +94,31 @@ typedef struct Object {
 } Object;
 
 #define MAX_GAME_OBJECTS 100
-static Object gameObjects[MAX_GAME_OBJECTS] = { 0 };
-static int gameObjectCount = 0;
+static Object game_objects[MAX_GAME_OBJECTS] = { 0 };
+static int game_object_count = 0;
 
 // Gameplay Screen Initialization logic
 void InitGameplayScreen(void)
 {
-    Object* ship = &gameObjects[0];
-    ship->vertexCount = 4;
+    Object* ship = &game_objects[0];
+    ship->vertex_count = 4;
     ship->active = true;
-    ship->initialVertices = shipData;
+    ship->initial_vertices = shipData;
     ship->position = (Vector2){ GetScreenWidth() / 2.0f, GetScreenHeight() / 2.0f };
-    ship->vertices = (Vector2*)RL_CALLOC(ship->vertexCount, sizeof(Vector2));
-    gameObjectCount++;
+    ship->vertices = (Vector2*)RL_CALLOC(ship->vertex_count, sizeof(Vector2));
+    game_object_count++;
 
     for (int i = 0; i < MAX_BULLETS; ++i) {
-        Object* obj = &gameObjects[gameObjectCount];
+        Object* obj = &game_objects[game_object_count];
         obj->active = false;
+        obj->vertex_count = bullet_vertex_count;
+        obj->initial_vertices = bullet_data;
+        obj->vertices = (Vector2*)RL_CALLOC(obj->vertex_count, sizeof(Vector2));
+
+        Bullet* bullet = &bullets[i];
+        bullet->lifetime = 0;
+        bullet->objectNum = game_object_count;
+        game_object_count++;
     }
 
     // TODO: Initialize GAMEPLAY screen variables here!
@@ -136,10 +156,24 @@ void UpdateShip(Object* ship) {
         ship->velocity = Vector2ClampValue(ship->velocity, -shipMaxSpeed, shipMaxSpeed);
     }
 
-    ship->position = Vector2Add(ship->position, ship->velocity);
+    // Update Bullets and shoot
+    bool doShoot = IsKeyPressed(KEY_SPACE);
 
-    if (IsKeyPressed(KEY_SPACE)) {
+    for (int i = 0; i < MAX_BULLETS; ++i) {
+        bullets[i].lifetime = Clamp(bullets[i].lifetime - dt, -1.0f, 999.0f);
 
+        if (bullets[i].lifetime <= 0.0) {
+            Object* obj = &game_objects[bullets[i].objectNum];
+            obj->active = false;
+            if (doShoot)
+            {
+                bullets[i].lifetime = bulletInitialLifetime;
+                obj->active = true;
+                obj->position = ship->position;
+                obj->velocity = Vector2Scale(fwd, bulletInitialVelocity);
+                doShoot = false;
+            }
+        }
     }
 }
 
@@ -147,7 +181,7 @@ void UpdateShip(Object* ship) {
 
 void UpdateGameplayScreen(void)
 {
-
+    dt = GetFrameTime();
     // TODO: Update GAMEPLAY screen variables here!
 
     // Press enter or tap to change to ENDING screen
@@ -157,14 +191,19 @@ void UpdateGameplayScreen(void)
         PlaySound(fxCoin);
     }
 
-    UpdateShip(&gameObjects[0]);
+    UpdateShip(&game_objects[0]);
 
     // Update all game objects data
 
-    for (int i = 0; i < gameObjectCount; ++i) {
-        Object* obj = &gameObjects[i];
-        for (int v = 0; v < obj->vertexCount; ++v) {
-            obj->vertices[v] = Vector2Add(Vector2Scale(Vector2Rotate(obj->initialVertices[v], obj->rot * PI
+    for (int i = 0; i < game_object_count; ++i) {
+        Object* obj = &game_objects[i];
+        
+        if (!obj->active) continue;
+
+        obj->position = Vector2Add(obj->position, obj->velocity);
+
+        for (int v = 0; v < obj->vertex_count; ++v) {
+            obj->vertices[v] = Vector2Add(Vector2Scale(Vector2Rotate(obj->initial_vertices[v], obj->rot * PI
             / 180.0f), 20), obj->position);
         }
     }
@@ -180,17 +219,17 @@ void DrawGameplayScreen(void)
     DrawTextEx(font, "GAMEPLAY SCREEN", pos, font.baseSize*3.0f, 4, MAROON);
     DrawText("PRESS ENTER or TAP to JUMP to ENDING SCREEN", 130, 220, 20, MAROON);
 
-    for (int i = 0; i < gameObjectCount; ++i) {
-        Object* obj = &gameObjects[i];
-        DrawLineStrip(obj->vertices, obj->vertexCount, RAYWHITE);
+    for (int i = 0; i < game_object_count; ++i) {
+        Object* obj = &game_objects[i];
+        DrawLineStrip(obj->vertices, obj->vertex_count, RAYWHITE);
     }
 }
 
 // Gameplay Screen Unload logic
 void UnloadGameplayScreen(void)
 {
-    for (int i = 0; i < gameObjectCount; ++i) {
-        Object* obj = &gameObjects[i];
+    for (int i = 0; i < game_object_count; ++i) {
+        Object* obj = &game_objects[i];
         free(obj->vertices);
     }
     // TODO: Unload GAMEPLAY screen variables here!
