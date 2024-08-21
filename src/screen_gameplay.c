@@ -125,6 +125,9 @@ static Vector2 asteroidDataLarge[11] = {
     {-0.5f, 1.2f}
 };
 
+static Vector2 asteroidDataMedium[11] = { 0 };
+static Vector2 asteroidDataSmall[11] = { 0 };
+ 
 static int asteroidVertexCount = 11;
 
 //----------------------------------------------------------------------------------
@@ -258,7 +261,55 @@ void AddAsteroid() {
     float rot = (float)GetRandomValue(0, 359) * PI / 180.0f;
     float vel = (float)GetRandomValue(8, 13) / 2.0f;
     obj->velocity = Vector2Scale(Vector2Rotate(yUp, rot), vel);
-    obj->rotVel = (float)GetRandomValue(0, 100) / 1000.0f;
+    obj->rotVel = (float)GetRandomValue(-100, 100) / 1000.0f;
+}
+
+void BreakAsteroid(Asteroid* asteroid, Object* obj) {
+    if (asteroid->size == 1) {
+        StackPush(&stack, asteroid->objectId);
+        *asteroid = (Asteroid){ -1, -1 };
+        obj->active = false;
+        // TODO Add Score
+        return;
+    }
+    int newSize = (asteroid->size == 4) ? 2 : 1;
+    Vector2* initialVertexData = (newSize == 2) ? asteroidDataMedium : asteroidDataSmall;
+    asteroid->size = newSize;
+
+    // Reuse the Original GameObject and add a new one
+    // Vertex Count stays the same
+    obj->initialVertices = initialVertexData;
+    obj->velocity = Vector2Rotate(obj->velocity, PI / 2.0f);
+    obj->rotVel = (float)GetRandomValue(-100, 100) / 1000.0f;
+
+    int newAsteroid = -1;
+    for (int i = 0; i < MAX_ASTEROIDS; ++i) {
+        if (asteroids[i].objectId == -1) {
+            newAsteroid = i;
+            break;
+        }
+    }
+
+    if (newAsteroid < 0) {
+        TraceLog(LOG_FATAL, "Out of asteroids");
+        return;
+    }
+    
+    int newId = StackPop(&stack); 
+    asteroids[newAsteroid] = (Asteroid){ newId, newSize };
+
+    Object* newObj = &gameobjects[newId];
+
+    newObj->active = true;
+    if (newObj->vertexCount < asteroidVertexCount || newObj->vertexCount == 0) {
+        free(newObj->vertices);
+        newObj->vertices = (Vector2*)RL_CALLOC(asteroidVertexCount, sizeof(Vector2));
+    }
+    newObj->vertexCount = asteroidVertexCount;
+    newObj->initialVertices = initialVertexData;
+    newObj->position = obj->position;
+    newObj->velocity = Vector2Negate(obj->velocity);
+    newObj->rotVel = (float)GetRandomValue(-100, 100) / 1000.0f;
 }
 
 
@@ -290,6 +341,11 @@ void InitGameplayScreen(void)
 
     for (int i = 0; i < MAX_ASTEROIDS; ++i) {
         asteroids[i] = (Asteroid){ -1, -1 };
+    }
+
+    for (int i = 0; i < asteroidVertexCount; ++i) {
+        asteroidDataMedium[i] = Vector2Scale(asteroidDataLarge[i], .5);
+        asteroidDataSmall[i] = Vector2Scale(asteroidDataLarge[i], .25);
     }
 
     AddAsteroid();
@@ -356,15 +412,15 @@ void CheckCollisions() {
     
     Object* ship = &gameobjects[0];
 
-    for (int i = 0; i < MAX_ASTEROIDS; ++i) {
+    for (int i = MAX_ASTEROIDS - 1; i >= 0; --i) {
         Asteroid* asteroid = &asteroids[i];
         if (asteroid->objectId < 0) continue;
         Object* aObj = &gameobjects[asteroid->objectId];
 
         if (CheckCollisionCircles(ship->position, 0.5f * gameScale, aObj->position, 0.3f * asteroid->size * gameScale)) {
-            TraceLog(LOG_INFO, "Ship hit by asteroid");
-            ResetShip();
-            ResetBullets();
+            TraceLog(LOG_INFO, "Ship hit by asteroid %d", i);
+            //ResetShip();
+            //ResetBullets();
             break;
         }
 
@@ -373,7 +429,7 @@ void CheckCollisions() {
             if (!bObj->active) continue;
             if (CheckCollisionPointCircle(bObj->position, aObj->position, 0.3f * asteroid->size * gameScale)) {
                 TraceLog(LOG_INFO, "Asteroid hit by bullet");
-                //BreakAsteroid(asteroid, aObj);
+                BreakAsteroid(asteroid, aObj);
                 bullets[j].lifetime = -1;
                 bObj->active = false;
             }
