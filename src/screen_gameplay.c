@@ -45,9 +45,10 @@ Small Asteroid	    0.6
 Alien Ship (large)  1.5
 Alien Ship (small)  0.75
 
+*/
 
-
-
+/* Notes: 
+    Concept of "alive" differs, for the bullet its, gameobject->active, for the asteroid it's asteroid->gameobject != -1 
 
 */
 
@@ -69,10 +70,10 @@ static Vector2 shipData[4] = {
     {-0.25f, 0.5f},
 };
 
-static float shipRotationFactor = 1.0f;
-static float shipAccelartionFactor = .1f;
-static float shipDecelrationFactor = .99f;
-static float shipMaxSpeed = 2.0f;
+static float shipRotationFactor = 2.0f;
+static float shipAccelartionFactor = .2f;
+static float shipDecelrationFactor = .995f;
+static float shipMaxSpeed = 14.0f;
 static float shipSpeedCutoff = 0.05f;
 static float gameScale = 28;
 
@@ -90,20 +91,20 @@ static const int bullet_vertex_count = 5;
 
 #define MAX_BULLETS 5
 typedef struct Bullet {
-    int objectNum;
+    int objectId;
     float lifetime;
 } Bullet;
 
 static Bullet bullets[MAX_BULLETS] = { 0 };
 
-static float bulletInitialLifetime = 5; // seconds
-static float bulletInitialVelocity = 2.0f;
+static float bulletInitialLifetime = .5f; // seconds
+static float bulletInitialVelocity = 14.0f;
 
 static float lastCallTime = 0.0f;
 static float dt = 0.0f;
 
 typedef struct Asteroid {
-    int objectNum;
+    int objectId;
     int size;
 } Asteroid;
 
@@ -144,8 +145,13 @@ typedef struct Object {
 } Object;
 
 #define MAX_GAME_OBJECTS 100
-static Object game_objects[MAX_GAME_OBJECTS] = { 0 };
+static Object gameobjects[MAX_GAME_OBJECTS] = { 0 };
 static int game_object_count = 0;
+
+//----------------------------------------------------------------------------------
+// Gameobject Stack
+//----------------------------------------------------------------------------------
+
 
 typedef struct Stack {
     int current;
@@ -182,11 +188,29 @@ void InitGameObjectStack() {
     }
 }
 
+// Resets Ship to original position and orientation
+void ResetShip() {
+    Object* ship = &gameobjects[0];
+    ship->position = (Vector2){ GetScreenWidth() / 2.0f, GetScreenHeight() / 2.0f };
+    ship->velocity = Vector2Zero();
+    ship->rot = 0;
+    ship->rotVel = 0;
+}
+
+void ResetBullets() {
+    for (int i = 0; i < MAX_BULLETS; ++i) {
+        Bullet* bullet = &bullets[i];
+        if (bullet->objectId < 0) continue;
+        gameobjects[bullet->objectId].active = false;
+        bullet->lifetime = -1;
+    }
+}
+
 // Adds asteroid on the border, size is always large
 void AddAsteroid() {
     int asteroidId = -1;
     for (int i = 0; i < MAX_ASTEROIDS; ++i) {
-        if (asteroids[i].objectNum <= 0) {
+        if (asteroids[i].objectId <= 0) {
             asteroidId = i;
             break;
         }
@@ -197,11 +221,13 @@ void AddAsteroid() {
         return;
     }
 
-    int objId = StackPop(&stack);
-    Object* obj = &game_objects[objId];
+    TraceLog(LOG_INFO, "Adding Asteroid");
 
-    asteroids[asteroidId].objectNum = objId;
-    asteroids[asteroidId].size = 3;
+    int objId = StackPop(&stack);
+    Object* obj = &gameobjects[objId];
+
+    asteroids[asteroidId].objectId = objId;
+    asteroids[asteroidId].size = 4; // Sizes 1,2,4
 
     obj->active = true;
     if (obj->vertexCount < asteroidVertexCount || obj->vertexCount == 0) {
@@ -241,16 +267,16 @@ void InitGameplayScreen(void)
 {
     InitGameObjectStack();
 
-    Object* ship = &game_objects[0];
+    Object* ship = &gameobjects[0];
     ship->vertexCount = 4;
     ship->active = true;
     ship->initialVertices = shipData;
-    ship->position = (Vector2){ GetScreenWidth() / 2.0f, GetScreenHeight() / 2.0f };
     ship->vertices = (Vector2*)RL_CALLOC(ship->vertexCount, sizeof(Vector2));
+    ResetShip();
     game_object_count++;
 
     for (int i = 0; i < MAX_BULLETS; ++i) {
-        Object* obj = &game_objects[game_object_count];
+        Object* obj = &gameobjects[game_object_count];
         obj->active = false;
         obj->vertexCount = bullet_vertex_count;
         obj->initialVertices = bullet_data;
@@ -258,8 +284,12 @@ void InitGameplayScreen(void)
 
         Bullet* bullet = &bullets[i];
         bullet->lifetime = 0;
-        bullet->objectNum = game_object_count;
+        bullet->objectId = game_object_count;
         game_object_count++;
+    }
+
+    for (int i = 0; i < MAX_ASTEROIDS; ++i) {
+        asteroids[i] = (Asteroid){ -1, -1 };
     }
 
     AddAsteroid();
@@ -268,9 +298,9 @@ void InitGameplayScreen(void)
     // TODO: Initialize GAMEPLAY screen variables here!
     framesCounter = 0;
     finishScreen = 0;
-
 }
 
+// React to user input, calculate new orientation, spawn bullets
 void UpdateShip(Object* ship) {
 
     if (IsKeyDown(KEY_A))
@@ -299,14 +329,14 @@ void UpdateShip(Object* ship) {
         ship->velocity = Vector2ClampValue(ship->velocity, -shipMaxSpeed, shipMaxSpeed);
     }
 
-    // Update Bullets and shoot
+    // Spawn Bullets and shoot
     bool doShoot = IsKeyPressed(KEY_SPACE);
 
     for (int i = 0; i < MAX_BULLETS; ++i) {
         bullets[i].lifetime = Clamp(bullets[i].lifetime - dt, -1.0f, 999.0f);
 
         if (bullets[i].lifetime <= 0.0) {
-            Object* obj = &game_objects[bullets[i].objectNum];
+            Object* obj = &gameobjects[bullets[i].objectId];
             obj->active = false;
             if (doShoot)
             {
@@ -315,6 +345,37 @@ void UpdateShip(Object* ship) {
                 obj->position = ship->position;
                 obj->velocity = Vector2Scale(fwd, bulletInitialVelocity);
                 doShoot = false;
+            }
+        }
+    }
+}
+
+void CheckCollisions() {
+    // Check Ship againts Asteroids
+    // Check Bullets against Asteroids
+    
+    Object* ship = &gameobjects[0];
+
+    for (int i = 0; i < MAX_ASTEROIDS; ++i) {
+        Asteroid* asteroid = &asteroids[i];
+        if (asteroid->objectId < 0) continue;
+        Object* aObj = &gameobjects[asteroid->objectId];
+
+        if (CheckCollisionCircles(ship->position, 0.5f * gameScale, aObj->position, 0.3f * asteroid->size * gameScale)) {
+            TraceLog(LOG_INFO, "Ship hit by asteroid");
+            ResetShip();
+            ResetBullets();
+            break;
+        }
+
+        for (int j = 0; j < MAX_BULLETS; ++j) {
+            Object* bObj = &gameobjects[bullets[j].objectId];
+            if (!bObj->active) continue;
+            if (CheckCollisionPointCircle(bObj->position, aObj->position, 0.3f * asteroid->size * gameScale)) {
+                TraceLog(LOG_INFO, "Asteroid hit by bullet");
+                //BreakAsteroid(asteroid, aObj);
+                bullets[j].lifetime = -1;
+                bObj->active = false;
             }
         }
     }
@@ -334,12 +395,12 @@ void UpdateGameplayScreen(void)
         PlaySound(fxCoin);
     }
 
-    UpdateShip(&game_objects[0]);
+    UpdateShip(&gameobjects[0]);
 
     // Update all game objects data
 
     for (int i = 0; i < MAX_GAME_OBJECTS; ++i) {
-        Object* obj = &game_objects[i];
+        Object* obj = &gameobjects[i];
 
         if (!obj->active) continue;
 
@@ -354,6 +415,8 @@ void UpdateGameplayScreen(void)
                 / 180.0f), gameScale), obj->position);
         }
     }
+
+    CheckCollisions();
 }
 
 // Gameplay Screen Draw logic
@@ -366,7 +429,7 @@ void DrawGameplayScreen(void)
     //DrawText("PRESS ENTER or TAP to JUMP to ENDING SCREEN", 130, 220, 20, MAROON);
 
     for (int i = 0; i < MAX_GAME_OBJECTS; ++i) {
-        Object* obj = &game_objects[i];
+        Object* obj = &gameobjects[i];
         if (!obj->active) continue;
         DrawLineStrip(obj->vertices, obj->vertexCount, RAYWHITE);
     }
@@ -376,9 +439,11 @@ void DrawGameplayScreen(void)
 void UnloadGameplayScreen(void)
 {
     for (int i = 0; i < MAX_GAME_OBJECTS; ++i) {
-        Object* obj = &game_objects[i];
+        Object* obj = &gameobjects[i];
         free(obj->vertices);
     }
+
+    stack.current = 0;
     // TODO: Unload GAMEPLAY screen variables here!
 }
 
