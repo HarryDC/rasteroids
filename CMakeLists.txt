@@ -33,7 +33,8 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
 add_custom_command(
 	TARGET ${PROJECT_NAME} POST_BUILD
 	COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/src/resources $<TARGET_FILE_DIR:${PROJECT_NAME}>/resources
-	DEPENDS ${PROJECT_NAME})
+	#DEPENDS ${PROJECT_NAME}
+)
 
 #set(raylib_VERBOSE 1)
 target_link_libraries(${PROJECT_NAME} raylib)
