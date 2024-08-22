@@ -70,6 +70,8 @@ static Vector2 shipData[4] = {
     {-0.25f, 0.5f},
 };
 
+static int shipVertexCount = 4;
+
 static float shipRotationFactor = 2.0f;
 static float shipAccelartionFactor = .2f;
 static float shipDecelrationFactor = .995f;
@@ -129,6 +131,24 @@ static Vector2 asteroidDataMedium[11] = { 0 };
 static Vector2 asteroidDataSmall[11] = { 0 };
  
 static int asteroidVertexCount = 11;
+
+enum Enemies {
+    NONE = 0,
+    ASTEROID_SMALL = 1, 
+    ASTEROID_MEDIUM = 2,
+    UNUSED = 3,
+    ASTEROID_LARGE = 4, 
+    SAUCER_LARGE = 5, 
+    SAUCER_SMALL = 6,
+    MAX_TYPES = 7
+};
+
+typedef struct Game {
+    int score;
+    int lives;
+} Game;
+
+Game game;
 
 //----------------------------------------------------------------------------------
 // Objects Definition
@@ -230,7 +250,7 @@ void AddAsteroid() {
     Object* obj = &gameobjects[objId];
 
     asteroids[asteroidId].objectId = objId;
-    asteroids[asteroidId].size = 4; // Sizes 1,2,4
+    asteroids[asteroidId].size = ASTEROID_LARGE; // Sizes 1,2,4
 
     obj->active = true;
     if (obj->vertexCount < asteroidVertexCount || obj->vertexCount == 0) {
@@ -240,6 +260,7 @@ void AddAsteroid() {
     obj->vertexCount = asteroidVertexCount;
     obj->initialVertices = asteroidDataLarge;
 
+    // Start from a border
     int sector = GetRandomValue(0, 3);
     switch (sector) {
         case 0:
@@ -264,12 +285,25 @@ void AddAsteroid() {
     obj->rotVel = (float)GetRandomValue(-100, 100) / 1000.0f;
 }
 
+void AddScore(int type) {
+    static int scores[MAX_TYPES] = { -1, 100, 50, -1, 20, 200, 1000 };
+    if (type > 0 && type < MAX_TYPES) {
+        game.score += scores[type];
+    }
+    else {
+        TraceLog(LOG_WARNING, "AddScore: called with invalid type");
+    }
+}
+
 void BreakAsteroid(Asteroid* asteroid, Object* obj) {
-    if (asteroid->size == 1) {
+    
+    AddScore(asteroid->size);
+
+    if (asteroid->size == ASTEROID_SMALL) {
         StackPush(&stack, asteroid->objectId);
         *asteroid = (Asteroid){ -1, -1 };
         obj->active = false;
-        // TODO Add Score
+        AddScore(ASTEROID_SMALL);
         return;
     }
     int newSize = (asteroid->size == 4) ? 2 : 1;
@@ -282,6 +316,7 @@ void BreakAsteroid(Asteroid* asteroid, Object* obj) {
     obj->velocity = Vector2Rotate(obj->velocity, PI / 2.0f);
     obj->rotVel = (float)GetRandomValue(-100, 100) / 1000.0f;
 
+    // Spawn a new asteroid
     int newAsteroid = -1;
     for (int i = 0; i < MAX_ASTEROIDS; ++i) {
         if (asteroids[i].objectId == -1) {
@@ -317,6 +352,8 @@ void BreakAsteroid(Asteroid* asteroid, Object* obj) {
 void InitGameplayScreen(void)
 {
     InitGameObjectStack();
+
+    game = (Game){ .score = 0, .lives = 3 };
 
     Object* ship = &gameobjects[0];
     ship->vertexCount = 4;
@@ -404,11 +441,14 @@ void UpdateShip(Object* ship) {
             }
         }
     }
+
+    // TODO Draw Engine graphics when firing
 }
 
 void CheckCollisions() {
     // Check Ship againts Asteroids
     // Check Bullets against Asteroids
+
     
     Object* ship = &gameobjects[0];
 
@@ -419,8 +459,10 @@ void CheckCollisions() {
 
         if (CheckCollisionCircles(ship->position, 0.5f * gameScale, aObj->position, 0.3f * asteroid->size * gameScale)) {
             TraceLog(LOG_INFO, "Ship hit by asteroid %d", i);
-            //ResetShip();
-            //ResetBullets();
+            ResetShip();
+            ResetBullets();
+            game.lives -= 1;
+            // TODO Ship Death animation
             break;
         }
 
@@ -443,6 +485,7 @@ void UpdateGameplayScreen(void)
 {
     dt = GetFrameTime();
     // TODO: Update GAMEPLAY screen variables here!
+
 
     // Press enter or tap to change to ENDING screen
     if (IsKeyPressed(KEY_ENTER) || IsGestureDetected(GESTURE_TAP))
@@ -478,11 +521,27 @@ void UpdateGameplayScreen(void)
 // Gameplay Screen Draw logic
 void DrawGameplayScreen(void)
 {
-    // TODO: Draw GAMEPLAY screen here!
+    // TODO: Draw GAMEPLAY screen here! 
+    // TODO Draw Game GUI
     DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(), BLACK);
     //Vector2 pos = { 20, 10 };
     //DrawTextEx(font, "GAMEPLAY SCREEN", pos, font.baseSize * 3.0f, 4, MAROON);
     //DrawText("PRESS ENTER or TAP to JUMP to ENDING SCREEN", 130, 220, 20, MAROON);
+
+    DrawText(TextFormat("%i", game.score), 20, 20, font.baseSize * 3.0f, RAYWHITE);
+
+    Vector2 pos = { 20, font.baseSize * 3.0f + 1.2 * gameScale };
+
+    for (int i = 0; i < game.lives; ++i) {
+        Vector2 start = Vector2Add(Vector2Scale(shipData[0], gameScale), pos);
+        for (int v = 1; v < shipVertexCount; ++v)
+        {
+            Vector2 end = Vector2Add(Vector2Scale(shipData[v], gameScale), pos);
+            DrawLineV(start, end, RAYWHITE);
+            start = end;
+        }
+        pos.x += .8f * gameScale;
+    }
 
     for (int i = 0; i < MAX_GAME_OBJECTS; ++i) {
         Object* obj = &gameobjects[i];
