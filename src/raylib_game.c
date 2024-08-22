@@ -25,8 +25,14 @@
 //----------------------------------------------------------------------------------
 GameScreen currentScreen = LOGO;
 Font font = { 0 };
-Music music = { 0 };
-Sound fxCoin = { 0 };
+
+
+static char* soundFiles[NUM_SOUNDS] = {
+    "resources/beat1.wav",
+    "resources/beat2.wav"
+};
+
+Sound sounds[NUM_SOUNDS] = {0};
 
 //----------------------------------------------------------------------------------
 // Local Variables Definition (local to this module)
@@ -67,11 +73,10 @@ int main(void)
     // font = LoadFont("resources/mecha.png");
     TraceLog(LOG_INFO, GetWorkingDirectory());
     font = LoadFont("resources/Hyperspace Bold.ttf");
-    //music = LoadMusicStream("resources/ambient.ogg");
-    fxCoin = LoadSound("resources/coin.wav");
 
-    SetMusicVolume(music, 1.0f);
-    PlayMusicStream(music);
+    for (int i = 0; i < NUM_SOUNDS; ++i) {
+        sounds[i] = LoadSound(soundFiles[i]);
+    }
 
     // Setup and init first screen
     currentScreen = GAMEPLAY;
@@ -105,8 +110,10 @@ int main(void)
 
     // Unload global data loaded
     UnloadFont(font);
-    UnloadMusicStream(music);
-    UnloadSound(fxCoin);
+    
+    for (int i = 0; i < NUM_SOUNDS; ++i) {
+        UnloadSound(sounds[i]);
+    }
 
     CloseAudioDevice();     // Close audio context
 
@@ -219,10 +226,6 @@ static void DrawTransition(void)
 // Update and draw game frame
 static void UpdateDrawFrame(void)
 {
-    // Update
-    //----------------------------------------------------------------------------------
-    UpdateMusicStream(music);       // NOTE: Music keeps playing between screens
-
     if (!onTransition)
     {
         switch(currentScreen)

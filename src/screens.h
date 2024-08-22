@@ -31,13 +31,17 @@
 //----------------------------------------------------------------------------------
 typedef enum GameScreen { UNKNOWN = -1, LOGO = 0, TITLE, OPTIONS, GAMEPLAY, ENDING } GameScreen;
 
+typedef enum Sounds {
+    SOUND_BEAT_1, SOUND_BEAT_2, NUM_SOUNDS
+} Sounds;
+
+
 //----------------------------------------------------------------------------------
 // Global Variables Declaration (shared by several modules)
 //----------------------------------------------------------------------------------
 extern GameScreen currentScreen;
 extern Font font;
-extern Music music;
-extern Sound fxCoin;
+extern Sound sounds[NUM_SOUNDS];
 
 #ifdef __cplusplus
 extern "C" {            // Prevents name mangling of functions

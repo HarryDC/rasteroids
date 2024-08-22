@@ -171,6 +171,14 @@ typedef struct Game {
 
 Game game;
 
+typedef struct BackgroundSound {
+    float elapsed;
+    float interval;
+    int beat;
+} BackgroundSound;
+
+BackgroundSound sound;
+
 //----------------------------------------------------------------------------------
 // Objects Definition
 //----------------------------------------------------------------------------------
@@ -544,6 +552,15 @@ void UpdateGameObjects() {
     }
 }
 
+void UpdateBackgroundSound() {
+    sound.elapsed += dt;
+    if (sound.elapsed > sound.interval) {
+        sound.elapsed = 0;
+        PlaySound(sounds[sound.beat]);
+        sound.beat = (sound.beat == SOUND_BEAT_1) ? SOUND_BEAT_2 : SOUND_BEAT_1;
+    }
+}
+
 //----------------------------------------------------------------------------------
 // Main Gameplay Functions (called by rayling_game.c
 //----------------------------------------------------------------------------------
@@ -553,6 +570,7 @@ void InitGameplayScreen(void)
     InitGameObjectStack();
 
     game = (Game){ .score = 0, .lives = 1, .hyperspace = 2, .state = LEVEL_START, .stateTime = 0 };
+    sound = (BackgroundSound){ .interval = 1, .elapsed = 0, .beat = SOUND_BEAT_1 };
 
     Object* ship = &gameobjects[0];
     ship->vertexCount = 4;
@@ -614,7 +632,6 @@ void UpdateGameplayScreen(void)
     if (IsKeyPressed(KEY_ENTER) || IsGestureDetected(GESTURE_TAP))
     {
         finishScreen = 1;
-        PlaySound(fxCoin);
     }
 
     switch (game.state) {
@@ -626,6 +643,7 @@ void UpdateGameplayScreen(void)
         break;
     case HYPERSPACE:
     {
+        UpdateBackgroundSound();
         if (game.stateTime > .75) {
             SetState(RUNNING);
             gameobjects[0].active = true;
@@ -635,6 +653,7 @@ void UpdateGameplayScreen(void)
     }
     case RUNNING:
     {
+        UpdateBackgroundSound();
         UpdateShip(&gameobjects[0]);
         UpdateGameObjects();
         if (CheckCollisions()) {

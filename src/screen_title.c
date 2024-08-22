@@ -54,7 +54,6 @@ void UpdateTitleScreen(void)
     {
         //finishScreen = 1;   // OPTIONS
         finishScreen = 2;   // GAMEPLAY
-        PlaySound(fxCoin);
     }
 }
 
