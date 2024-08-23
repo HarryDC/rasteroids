@@ -28,8 +28,16 @@ Font font = { 0 };
 
 
 static char* soundFiles[NUM_SOUNDS] = {
+    "resources/bangLarge.wav",
+    "resources/bangMedium.wav",
+    "resources/bangSmall.wav",
     "resources/beat1.wav",
-    "resources/beat2.wav"
+    "resources/beat2.wav",
+    "resources/extraShip.wav",
+    "resources/fire.wav",
+    "resources/saucerBig.wav",
+    "resources/saucerSmall.wav",
+    "resources/thrust.wav"
 };
 
 Sound sounds[NUM_SOUNDS] = {0};

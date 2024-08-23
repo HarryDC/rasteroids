@@ -52,9 +52,14 @@ Alien Ship (small)  0.75
     Concept of "alive" differs, for the bullet its, gameobject->active, for the asteroid it's asteroid->gameobject != -1 
 
 */
-// TODO Hyperspace
-// TODO UFO
 
+// TODO Hyperspace UI
+// TODO Thrust Graphics
+// TODO Level Progression
+// TODO Function to center text
+// TODO Gain Bonus ship
+// TODO Particle System for explosiions
+// TODO Add pause
 
 //----------------------------------------------------------------------------------
 // Module Variables Definition (local)
@@ -77,7 +82,7 @@ static Vector2 shipData[4] = {
 static int shipVertexCount = 4;
 
 static float shipRotationFactor = 2.0f;
-static float shipAccelartionFactor = .2f;
+static float shipAccelrationFactor = .2f;
 static float shipDecelrationFactor = .995f;
 static float shipMaxSpeed = 14.0f;
 static float shipSpeedCutoff = 0.05f;
@@ -92,6 +97,7 @@ static int shipDeadObjects[4] = { 0 };
 //----------------------------------------------------------------------------------
 // Bullet Definition
 //---------------------------------------------------------------------------------- 
+
 static Vector2 bullet_data[5] = {
     {-0.1f, -0.1f},
     {0.1f, -0.1f},
@@ -110,11 +116,12 @@ typedef struct Bullet {
 
 static Bullet bullets[MAX_BULLETS] = { 0 };
 
-static float bulletInitialLifetime = .5f; // seconds
+static float bulletInitialLifetime = 1.0f; // seconds
 static float bulletInitialVelocity = 14.0f;
 
-static float lastCallTime = 0.0f;
-static float dt = 0.0f;
+//----------------------------------------------------------------------------------
+// Asteroid Definition
+//---------------------------------------------------------------------------------- 
 
 typedef struct Asteroid {
     int objectId;
@@ -143,6 +150,46 @@ static Vector2 asteroidDataSmall[11] = { 0 };
  
 static int asteroidVertexCount = 11;
 
+//----------------------------------------------------------------------------------
+// Saucer Definition
+//---------------------------------------------------------------------------------- 
+const int saucerVertexCount = 13;
+static Vector2 saucerDataLarge[13] = {
+    {-0.75f, 0.2f}, // Bottom CCW 
+    {-0.4f, 0.5f},
+    {0.4f, 0.5f},
+    {0.75f, 0.2f},
+    {-0.75f, 0.2f},
+    {-0.4f, -0.1f}, // Middle CW
+    {0.4f, -0.1f},
+    {0.75f, 0.2f},
+    {-0.75f, 0.2f},
+    {-0.4f, -0.1f}, // Repeated (as we're drawing linestrip)
+    {-0.3f, -0.5f}, // Top
+    {0.3f, -0.5f},
+    {0.4f, -0.1f}
+};
+
+static Vector2 saucerDataSmall[13] = { 0 };
+
+typedef struct Saucer {
+    int objId;
+    int type;
+    int maxBullets;
+    float shotFreq;
+    float shotElapsed; // time since last shot
+    float noSaucerElapsed;
+} Saucer;
+
+static float saucerSpawnFrequency = 100.0f;
+static float saucerSpawnChance = 0.1f;
+
+Saucer saucer;
+
+//----------------------------------------------------------------------------------
+// Game global Definition
+//---------------------------------------------------------------------------------- 
+
 enum GameState {
     LEVEL_START,
     RUNNING,
@@ -166,6 +213,7 @@ typedef struct Game {
     int lives;
     int hyperspace;
     int state;
+    float dt;
     float stateTime;
 } Game;
 
@@ -178,6 +226,21 @@ typedef struct BackgroundSound {
 } BackgroundSound;
 
 BackgroundSound sound;
+
+typedef struct Particle {
+    Vector2 position;
+    Vector2 velocity;
+    float lifetime;
+} Particle;
+
+#define MAX_PARTICLES 100 
+
+typedef struct ParticleSystem {
+    Particle particles[MAX_PARTICLES];
+    int back;
+} ParticleSystem;
+
+ParticleSystem particleSystem;
 
 //----------------------------------------------------------------------------------
 // Objects Definition
@@ -251,6 +314,79 @@ void AddScore(int type) {
     }
     else {
         TraceLog(LOG_WARNING, "AddScore: called with invalid type");
+    }
+}
+
+Vector2 GetRandomEdgePosition() {
+    // Start from a border
+    int sector = GetRandomValue(0, 3);
+    switch (sector) {
+    case 0:
+        return (Vector2){ 0,(float)GetRandomValue(0, GetScreenHeight()) };
+    case 1:
+        return (Vector2){ (float)GetScreenWidth() , (float)GetRandomValue(0, GetScreenHeight()) };
+    case 2:
+        return (Vector2) { 0, (float)GetRandomValue(0, GetScreenHeight()) };
+    case 3:
+        return (Vector2){ (float)GetScreenWidth() ,(float)GetRandomValue(0, GetScreenHeight()) };
+    default:
+        TraceLog(LOG_WARNING, "Sector switch received invalid sector");
+        return Vector2Zero();
+    }
+}
+
+//----------------------------------------------------------------------------------
+// ParticleSystem Functions
+//----------------------------------------------------------------------------------
+void InitParticleSystem(ParticleSystem* system) {
+    for (int i = 0; i < MAX_PARTICLES; ++i) {
+        system->particles[i].lifetime = -1;
+    }
+    system->back = -1;
+}
+
+bool AddParticle(ParticleSystem *system, Vector2 pos, Vector2 vel, float lifetime) {
+    if (system->back < MAX_PARTICLES - 1) {
+        ++system->back;
+        system->particles[system->back] = (Particle){ .position = pos, .velocity = vel, .lifetime = lifetime };
+        return true;
+    }
+    return false;
+}
+
+void UpdateParticles(ParticleSystem* system, float dt) {
+
+    int i = 0;
+    while (i <= system->back) {
+        system->particles[i].lifetime -= dt;
+        if (system->particles[i].lifetime < 0) {
+            if (i < system->back) {
+                system->particles[i] = system->particles[system->back];
+            }
+            --system->back;
+            continue;
+        }
+
+        system->particles[i].position = Vector2Add(system->particles[i].position, system->particles[i].velocity);
+        ++i;
+    }
+}
+
+void DrawParticles(ParticleSystem* system) {
+    for (int i = 0; i <= system->back; ++i) {
+        DrawCircle(system->particles[i].position.x,
+            system->particles[i].position.y, 2, WHITE);
+    }
+}
+
+void SpawnExplosion(ParticleSystem* system, Vector2 pos, int count) {
+    for (int i = 0; i < count; ++i) {
+        int angle = GetRandomValue(0, 360);
+        Vector2 vel = Vector2Scale(Vector2Rotate(yUp, angle * PI / 180.0f), 0.5f);
+        if (!AddParticle(system, pos, vel, 2.5)) {
+            TraceLog(LOG_WARNING,"Out of Particles");
+            return;
+        }
     }
 }
 
@@ -341,13 +477,14 @@ void UpdateShip(Object* ship) {
     bool doShoot = IsKeyPressed(KEY_SPACE);
 
     for (int i = 0; i < MAX_BULLETS; ++i) {
-        bullets[i].lifetime = Clamp(bullets[i].lifetime - dt, -1.0f, 999.0f);
+        bullets[i].lifetime = Clamp(bullets[i].lifetime - game.dt, -1.0f, 999.0f);
 
         if (bullets[i].lifetime <= 0.0) {
             Object* obj = &gameobjects[bullets[i].objectId];
             obj->active = false;
             if (doShoot)
             {
+                PlaySound(sounds[SOUND_FIRE]);
                 bullets[i].lifetime = bulletInitialLifetime;
                 obj->active = true;
                 obj->position = ship->position;
@@ -368,8 +505,34 @@ void BreakShip(Object* ship) {
         obj->position = ship->vertices[i];
         obj->velocity = Vector2Scale(Vector2Subtract(obj->position, ship->position), 0.01f);
         obj->rot = (float)GetRandomValue(0, 360);
-        obj->rotVel = (float)GetRandomValue(0, 200) / 100.0;
+        obj->rotVel = (float)GetRandomValue(0, 200) / 100.0f;
     }
+}
+
+//----------------------------------------------------------------------------------
+// Bullet Functions
+//----------------------------------------------------------------------------------
+
+void SpawnBullet(Vector2 pos, Vector2 vel) {
+    int id = -1;
+    for (int i = 0; i < MAX_BULLETS; ++i)
+    {
+        if (bullets[i].lifetime < 0) {
+            id = i;
+            break;
+        }
+    }
+
+    if (id == -1) {
+        TraceLog(LOG_WARNING, "Out of bullets");
+        return;
+    }
+
+    bullets[id].lifetime = bulletInitialLifetime;
+    Object* obj = &gameobjects[bullets[id].objectId];
+    obj->active = true;
+    obj->position = pos;
+    obj->velocity = vel;
 }
 
 
@@ -407,47 +570,41 @@ void AddAsteroid() {
     }
     obj->vertexCount = asteroidVertexCount;
     obj->initialVertices = asteroidDataLarge;
-
-    // Start from a border
-    int sector = GetRandomValue(0, 3);
-    switch (sector) {
-        case 0:
-            obj->position = (Vector2){ 0,(float)GetRandomValue(0, GetScreenHeight()) };
-            break;
-        case 1:
-            obj->position = (Vector2){(float)GetScreenWidth() , (float)GetRandomValue(0, GetScreenHeight())};
-            break;
-        case 2:
-            obj->position = (Vector2){ 0,(float)GetRandomValue(0, GetScreenHeight()) };
-            break;
-        case 3:
-            obj->position = (Vector2){ (float)GetScreenWidth() ,(float)GetRandomValue(0, GetScreenHeight()) };
-            break;
-        default:
-            TraceLog(LOG_WARNING, "Sector switch received invalid sector");
-    }
+    obj->position = GetRandomEdgePosition();
 
     float rot = (float)GetRandomValue(0, 359) * PI / 180.0f;
-    float vel = (float)GetRandomValue(8, 13) / 2.0f;
+    float vel = 4.0f;
     obj->velocity = Vector2Scale(Vector2Rotate(yUp, rot), vel);
     obj->rotVel = (float)GetRandomValue(-100, 100) / 1000.0f;
 }
 
-
 void BreakAsteroid(Asteroid* asteroid, Object* obj) {
 
     AddScore(asteroid->size);
+    SpawnExplosion(&particleSystem, obj->position, 5);
 
     if (asteroid->size == ASTEROID_SMALL) {
         StackPush(&stack, asteroid->objectId);
         *asteroid = (Asteroid){ -1, -1 };
         obj->active = false;
         AddScore(ASTEROID_SMALL);
+        PlaySound(sounds[SOUND_BANG_SMALL]);
         return;
     }
-    int newSize = (asteroid->size == 4) ? 2 : 1;
-    Vector2* initialVertexData = (newSize == 2) ? asteroidDataMedium : asteroidDataSmall;
-    asteroid->size = newSize;
+
+    int newSize;
+    Vector2* initialVertexData;
+    if (asteroid->size == 4) {
+        newSize = 2;
+        initialVertexData = asteroidDataMedium;
+        PlaySound(sounds[SOUND_BANG_LARGE]);
+    }
+    else {
+        newSize = 1;
+        initialVertexData = asteroidDataSmall;
+        PlaySound(sounds[SOUND_BANG_MEDIUM]);
+
+    }
 
     // Reuse the Original GameObject and add a new one
     // Vertex Count stays the same
@@ -486,12 +643,113 @@ void BreakAsteroid(Asteroid* asteroid, Object* obj) {
     newObj->rotVel = (float)GetRandomValue(-100, 100) / 1000.0f;
 }
 
-// Gameplay Screen Initialization logic
+//----------------------------------------------------------------------------------
+// Saucer Functions
+//----------------------------------------------------------------------------------
+
+void SpawnSaucer(int type) {
+    Object* obj = &gameobjects[saucer.objId];
+
+    // Always Spawn on the RIM
+    obj->active = true;
+    obj->initialVertices = (type == SAUCER_LARGE) ? saucerDataLarge : saucerDataSmall;
+    obj->velocity = (Vector2){ 1, 1 };
+    obj->position = GetRandomEdgePosition();
+    obj->rot = 0;
+    obj->rotVel = 0;
+}
+
+// Source https://gamedev.net/forums/topic/401165-target-prediction-system--target-leading
+float largest_root_of_quadratic_equation(float A, float B, float C) {
+    return (B + sqrtf(B * B - 4 * A * C)) / (2 * A);
+}
+
+Vector2 intercept(Vector2 const shooter, float bullet_speed, Vector2 const target, Vector2 const target_velocity) {
+    float a = bullet_speed * bullet_speed - Vector2DotProduct(target_velocity, target_velocity);
+    Vector2 shooterToTarget = Vector2Subtract(target, shooter);
+    float b = -2 * Vector2DotProduct(target_velocity, shooterToTarget);
+    float c = -Vector2DotProduct(shooterToTarget, shooterToTarget);
+    return Vector2Add(target, Vector2Scale(target_velocity, largest_root_of_quadratic_equation(a, b, c)));
+}
+
+Vector2 shoot_at(Vector2 const shooter, Vector2 const interception, float bullet_speed) {
+    Vector2 v = Vector2Subtract(interception,shooter);
+    float scale = bullet_speed / Vector2Length(v);
+    return Vector2Scale(v, scale);
+}
+
+void LargeSaucerShoot() {
+    int count = 0;
+    for (int i = 0; i < MAX_ASTEROIDS; ++i) {
+        if (asteroids[i].objectId > 0) {
+            ++count;
+        }
+    }
+
+    count = GetRandomValue(0, count - 1);
+
+    Object* target;
+    int num = GetRandomValue(0, count - 1);
+    for (int i = 0; i < MAX_ASTEROIDS; ++i) {
+        if (asteroids[i].objectId > 0) {
+            if (count == 0) {
+                target = &gameobjects[asteroids[i].objectId];
+            }
+            --count;
+        }
+    }
+
+    Object* shooter = &gameobjects[saucer.objId];
+    Vector2 p = intercept(shooter->position, bulletInitialVelocity, target->position, target->velocity);
+    Vector2 bulletVel = shoot_at(shooter->position, p, bulletInitialVelocity);
+
+    SpawnBullet(shooter->position, bulletVel);
+    PlaySound(sounds[SOUND_FIRE]);
+}
+
+void UpdateSaucer() {
+    static int soundIds[2] = { SOUND_SAUCER_BIG, SOUND_SAUCER_SMALL };
+    typedef void (*ShootFunc)();
+    static ShootFunc shootFunc[2] = { LargeSaucerShoot, LargeSaucerShoot };
+
+    Object* obj = &gameobjects[saucer.objId];
+    if (obj->active) {
+        if (!IsSoundPlaying(sounds[soundIds[saucer.type]])) {
+            PlaySound(sounds[soundIds[saucer.type]]);
+        }
+        saucer.shotElapsed += game.dt;
+        if (saucer.shotElapsed > saucer.shotFreq) {
+            shootFunc[saucer.type]();
+            saucer.shotElapsed = 0;
+        }
+    }
+    else {
+        saucer.noSaucerElapsed += game.dt;
+        if (saucer.noSaucerElapsed < saucerSpawnFrequency) return;
+
+        float ran = GetRandomValue(0, 100) / 100.0f;
+        if (ran < saucerSpawnChance) {
+            saucer.noSaucerElapsed = 0;
+            if (game.score < 100000 || GetRandomValue(0,10) < 3) {
+                SpawnSaucer(SAUCER_LARGE);
+            }
+            else {
+                SpawnSaucer(SAUCER_SMALL);
+            }
+        }
+    }
+}
+
+
+//----------------------------------------------------------------------------------
+// General Functions
+//----------------------------------------------------------------------------------
 
 // Returns true if ship was destroyed
 bool CheckCollisions() {
 
     Object* ship = &gameobjects[0];
+    Object* saucerObj = &gameobjects[saucer.objId];
 
     for (int i = MAX_ASTEROIDS - 1; i >= 0; --i) {
         Asteroid* asteroid = &asteroids[i];
@@ -519,6 +777,16 @@ bool CheckCollisions() {
             }
         }
     }
+
+    if (saucerObj->active) {
+        if (CheckCollisionCircles(ship->position, 0.5f * gameScale, saucerObj->position, 0.7 * gameScale)) {
+            TraceLog(LOG_INFO, "Ship hit saucer");
+            BreakShip(ship);
+            game.lives -= 1;
+            return true;
+        }
+    }
+
     return false;
 }
 
@@ -553,7 +821,7 @@ void UpdateGameObjects() {
 }
 
 void UpdateBackgroundSound() {
-    sound.elapsed += dt;
+    sound.elapsed += game.dt;
     if (sound.elapsed > sound.interval) {
         sound.elapsed = 0;
         PlaySound(sounds[sound.beat]);
@@ -568,16 +836,28 @@ void UpdateBackgroundSound() {
 void InitGameplayScreen(void)
 {
     InitGameObjectStack();
+    InitParticleSystem(&particleSystem);
 
-    game = (Game){ .score = 0, .lives = 1, .hyperspace = 2, .state = LEVEL_START, .stateTime = 0 };
+    game = (Game){ .score = 0, .lives = 3, .hyperspace = 2, .state = LEVEL_START, .stateTime = 0 };
     sound = (BackgroundSound){ .interval = 1, .elapsed = 0, .beat = SOUND_BEAT_1 };
 
+    // Ship
     Object* ship = &gameobjects[0];
     ship->vertexCount = 4;
     ship->active = true;
     ship->initialVertices = shipData;
     ship->vertices = (Vector2*)RL_CALLOC(ship->vertexCount, sizeof(Vector2));
     ResetShip();
+
+    //Saucer
+    saucer = (Saucer){ .objId = 0, .maxBullets = 2, .shotElapsed = 0, .shotFreq = 1.5f, .type = 0, .noSaucerElapsed = 0 };
+    saucer.objId = StackPop(&stack);
+    Object* saucerObj = &gameobjects[saucer.objId];
+    saucerObj->active = false;
+    saucerObj->vertexCount = saucerVertexCount;
+    saucerObj->initialVertices = saucerDataLarge;
+    saucerObj->vertices = (Vector2*)RL_CALLOC(saucerObj->vertexCount, sizeof(Vector2));
+
 
     for (int i = 0; i < MAX_BULLETS; ++i) {
         int objId = StackPop(&stack);
@@ -623,10 +903,8 @@ void InitGameplayScreen(void)
 
 void UpdateGameplayScreen(void)
 {
-    dt = GetFrameTime();
-    game.stateTime += dt;
-    // TODO: Update GAMEPLAY screen variables here!
-
+    game.dt = GetFrameTime();
+    game.stateTime += game.dt;
 
     // Press enter or tap to change to ENDING screen
     if (IsKeyPressed(KEY_ENTER) || IsGestureDetected(GESTURE_TAP))
@@ -648,6 +926,8 @@ void UpdateGameplayScreen(void)
             SetState(RUNNING);
             gameobjects[0].active = true;
         }
+        UpdateSaucer();
+        UpdateParticles(&particleSystem, game.dt);
         UpdateGameObjects();
         break;
     }
@@ -655,6 +935,8 @@ void UpdateGameplayScreen(void)
     {
         UpdateBackgroundSound();
         UpdateShip(&gameobjects[0]);
+        UpdateParticles(&particleSystem, game.dt);
+        UpdateSaucer();
         UpdateGameObjects();
         if (CheckCollisions()) {
             SetState(DYING);
@@ -664,6 +946,7 @@ void UpdateGameplayScreen(void)
     case DYING:
     {
         UpdateGameObjects();
+        UpdateParticles(&particleSystem, game.dt);
         if (game.stateTime > 3.0) {
             if (game.lives > 0) {
                 ResetLevel();
@@ -682,8 +965,7 @@ void DrawGameplayScreen(void)
 {
     DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(), BLACK);
 
-    // HUD
-    DrawTextEx(font, TextFormat("%i", game.score), (Vector2) { 20, 20 }, font.baseSize, 1.0f,RAYWHITE);
+    DrawTextEx(font, TextFormat("%i", game.score), (Vector2) { 20, 20 }, (float)font.baseSize, 1.0f,RAYWHITE);
 
     Vector2 pos = { 20, font.baseSize + 1.2f * gameScale };
 
@@ -704,11 +986,13 @@ void DrawGameplayScreen(void)
         DrawLineStrip(obj->vertices, obj->vertexCount, RAYWHITE);
     }
 
+    DrawParticles(&particleSystem);
+
     switch (game.state) {
     case LEVEL_START:
     {
         Vector2 center = (Vector2){ GetScreenWidth() / 2.0f - 17 , GetScreenHeight() / 2.0f - 2 };
-        DrawTextEx(font, "PLAYER 1", center, font.baseSize, 1.0, RAYWHITE);
+        DrawTextEx(font, "PLAYER 1", center, (float)font.baseSize, 1.0, RAYWHITE);
     }
     }
 }
