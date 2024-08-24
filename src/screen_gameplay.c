@@ -58,7 +58,10 @@ Alien Ship (small)  0.75
 // TODO Level Progression
 // TODO Function to center text
 // TODO Gain Bonus ship
-// TODO Particle System for explosiions
+// TODO Small Saucer brain
+// TODO Fix Asteroid speeds (smaller faster)
+// TODO Speed up background pulse with level progression
+// TODO scale velocity over dt
 // TODO Add pause
 
 //----------------------------------------------------------------------------------
@@ -66,6 +69,28 @@ Alien Ship (small)  0.75
 //----------------------------------------------------------------------------------
 static int framesCounter = 0;
 static int finishScreen = 0;
+
+//----------------------------------------------------------------------------------
+// Objects Definition
+//----------------------------------------------------------------------------------
+
+static const Vector2 yUp = { 0, -1 };
+
+typedef struct Object {
+    bool active;
+    Vector2 position;
+    Vector2 velocity;
+    float rot;
+    float rotVel;
+    int vertexCount;
+    Vector2* initialVertices;   // Not Owned here
+    Vector2* vertices;          // Owned by the object
+    int type;                   // type of data, allows cast
+    void* data;                 // Not Owned here
+} Object;
+
+#define MAX_GAME_OBJECTS 100
+static Object gameobjects[MAX_GAME_OBJECTS] = { 0 };
 
 //----------------------------------------------------------------------------------
 // Ship Definitions
@@ -92,7 +117,7 @@ static Vector2 shipDeadData[2] = {
     {0, 0.25f},
     {0, -0.25f}
 };
-static int shipDeadObjects[4] = { 0 };
+static Object* shipDeadObjects[4] = { NULL };
 
 //----------------------------------------------------------------------------------
 // Bullet Definition
@@ -110,7 +135,7 @@ static const int bullet_vertex_count = 5;
 
 #define MAX_BULLETS 5
 typedef struct Bullet {
-    int objectId;
+    Object* object;
     float lifetime;
 } Bullet;
 
@@ -124,7 +149,7 @@ static float bulletInitialVelocity = 14.0f;
 //---------------------------------------------------------------------------------- 
 
 typedef struct Asteroid {
-    int objectId;
+    Object *object;
     int size;
 } Asteroid;
 
@@ -173,7 +198,7 @@ static Vector2 saucerDataLarge[13] = {
 static Vector2 saucerDataSmall[13] = { 0 };
 
 typedef struct Saucer {
-    int objId;
+    Object* object;
     int type;
     int maxBullets;
     float shotFreq;
@@ -242,26 +267,7 @@ typedef struct ParticleSystem {
 
 ParticleSystem particleSystem;
 
-//----------------------------------------------------------------------------------
-// Objects Definition
-//----------------------------------------------------------------------------------
 
-static const Vector2 yUp = { 0, -1 };
-
-typedef struct Object {
-    bool active;
-    int vertexCount;
-    Vector2* initialVertices;
-    Vector2* vertices;
-    Vector2 position;
-    float rot;
-    float rotVel;
-    Vector2 velocity;
-} Object;
-
-#define MAX_GAME_OBJECTS 100
-static Object gameobjects[MAX_GAME_OBJECTS] = { 0 };
-static int game_object_count = 0;
 
 //----------------------------------------------------------------------------------
 // Gameobject Stack
@@ -270,35 +276,35 @@ static int game_object_count = 0;
 typedef struct Stack {
     int current;
     int size;
-    int content[MAX_GAME_OBJECTS];
+    Object* content[MAX_GAME_OBJECTS];
 } Stack;
 
 Stack stack;
 
-void StackPush(Stack *stack, int index) {
+void StackPush(Stack *stack, Object* object) {
     if (stack->current < stack->size) {
-        stack->content[stack->current++] = index;
+        stack->content[stack->current++] = object;
     }
     else {
         TraceLog(LOG_FATAL, "Push onto full stack");
     }
 }
 
-int StackPop(Stack* stack) {
+Object* StackPop(Stack* stack) {
     if (stack->current > 0) {
         return stack->content[--stack->current];
     }
     else {
         TraceLog(LOG_FATAL, "Pop for empty stack");
-        return 0xffffffff;
+        return NULL;
     }
 }
 
-void InitGameObjectStack() {
-    stack.size = MAX_GAME_OBJECTS;
-    // 0, MAX_BULLETS are used for the ship and bullets respectively
-    for (int i = stack.size-1; i > 1; --i) {
-        StackPush(&stack, i);
+// Assumes stack and objects have the same size 
+void InitGameObjectStack(Stack *stack, Object objects[]) {
+    stack->size = MAX_GAME_OBJECTS;
+    for (int i = stack->size-1; i >= 0; --i) {
+        StackPush(stack, &objects[i]);
     }
 }
 
@@ -374,8 +380,8 @@ void UpdateParticles(ParticleSystem* system, float dt) {
 
 void DrawParticles(ParticleSystem* system) {
     for (int i = 0; i <= system->back; ++i) {
-        DrawCircle(system->particles[i].position.x,
-            system->particles[i].position.y, 2, WHITE);
+        DrawCircle((int)system->particles[i].position.x,
+                   (int)system->particles[i].position.y, 2, WHITE);
     }
 }
 
@@ -407,25 +413,23 @@ void ResetShip() {
 void ResetBullets() {
     for (int i = 0; i < MAX_BULLETS; ++i) {
         Bullet* bullet = &bullets[i];
-        if (bullet->objectId < 0) continue;
-        gameobjects[bullet->objectId].active = false;
+        if (bullet->object == NULL) continue;
+        bullet->object->active = false;
         bullet->lifetime = -1;
     }
 }
 
 void ResetFragments() {
     for (int i = 0; i < 4; ++i) {
-        gameobjects[shipDeadObjects[i]].active = false;
+        shipDeadObjects[i]->active = false;
     }
 }
 
 bool CheckCollisionAsteroids(Vector2 pos, float radius) {
     for (int i = MAX_ASTEROIDS - 1; i >= 0; --i) {
         Asteroid* asteroid = &asteroids[i];
-        if (asteroid->objectId < 0) continue;
-        Object* aObj = &gameobjects[asteroid->objectId];
-
-        if (CheckCollisionCircles(pos, radius * gameScale, aObj->position, 0.3f * asteroid->size * gameScale)) {
+        if (asteroid->object == NULL ) continue;
+        if (CheckCollisionCircles(pos, radius * gameScale, asteroid->object->position, 0.3f * asteroid->size * gameScale)) {
             return true;
         }
     }
@@ -480,7 +484,7 @@ void UpdateShip(Object* ship) {
         bullets[i].lifetime = Clamp(bullets[i].lifetime - game.dt, -1.0f, 999.0f);
 
         if (bullets[i].lifetime <= 0.0) {
-            Object* obj = &gameobjects[bullets[i].objectId];
+            Object* obj = bullets[i].object;
             obj->active = false;
             if (doShoot)
             {
@@ -500,7 +504,7 @@ void UpdateShip(Object* ship) {
 void BreakShip(Object* ship) {
     ship->active = false;
     for (int i = 0; i < 3; ++i) {
-        Object* obj = &gameobjects[shipDeadObjects[i]];
+        Object* obj = shipDeadObjects[i];
         obj->active = true;
         obj->position = ship->vertices[i];
         obj->velocity = Vector2Scale(Vector2Subtract(obj->position, ship->position), 0.01f);
@@ -529,7 +533,7 @@ void SpawnBullet(Vector2 pos, Vector2 vel) {
     }
 
     bullets[id].lifetime = bulletInitialLifetime;
-    Object* obj = &gameobjects[bullets[id].objectId];
+    Object* obj = bullets[id].object;
     obj->active = true;
     obj->position = pos;
     obj->velocity = vel;
@@ -544,7 +548,7 @@ void SpawnBullet(Vector2 pos, Vector2 vel) {
 void AddAsteroid() {
     int asteroidId = -1;
     for (int i = 0; i < MAX_ASTEROIDS; ++i) {
-        if (asteroids[i].objectId <= 0) {
+        if (asteroids[i].object == 0) {
             asteroidId = i;
             break;
         }
@@ -557,10 +561,9 @@ void AddAsteroid() {
 
     TraceLog(LOG_INFO, "Adding Asteroid");
 
-    int objId = StackPop(&stack);
-    Object* obj = &gameobjects[objId];
+    Object* obj = StackPop(&stack);
 
-    asteroids[asteroidId].objectId = objId;
+    asteroids[asteroidId].object = obj;
     asteroids[asteroidId].size = ASTEROID_LARGE; // Sizes 1,2,4
 
     obj->active = true;
@@ -578,15 +581,15 @@ void AddAsteroid() {
     obj->rotVel = (float)GetRandomValue(-100, 100) / 1000.0f;
 }
 
-void BreakAsteroid(Asteroid* asteroid, Object* obj) {
+void BreakAsteroid(Asteroid* asteroid) {
 
     AddScore(asteroid->size);
-    SpawnExplosion(&particleSystem, obj->position, 5);
+    SpawnExplosion(&particleSystem, asteroid->object->position, 5);
 
     if (asteroid->size == ASTEROID_SMALL) {
-        StackPush(&stack, asteroid->objectId);
-        *asteroid = (Asteroid){ -1, -1 };
-        obj->active = false;
+        asteroid->object->active = false;
+        StackPush(&stack, asteroid->object);
+        *asteroid = (Asteroid){ .object = NULL, .size = -1 };
         AddScore(ASTEROID_SMALL);
         PlaySound(sounds[SOUND_BANG_SMALL]);
         return;
@@ -606,6 +609,7 @@ void BreakAsteroid(Asteroid* asteroid, Object* obj) {
 
     }
 
+    Object* obj = asteroid->object;
     // Reuse the Original GameObject and add a new one
     // Vertex Count stays the same
     obj->initialVertices = initialVertexData;
@@ -615,7 +619,7 @@ void BreakAsteroid(Asteroid* asteroid, Object* obj) {
     // Spawn a new asteroid
     int newAsteroid = -1;
     for (int i = 0; i < MAX_ASTEROIDS; ++i) {
-        if (asteroids[i].objectId == -1) {
+        if (asteroids[i].object == NULL) {
             newAsteroid = i;
             break;
         }
@@ -626,10 +630,9 @@ void BreakAsteroid(Asteroid* asteroid, Object* obj) {
         return;
     }
 
-    int newId = StackPop(&stack);
-    asteroids[newAsteroid] = (Asteroid){ newId, newSize };
 
-    Object* newObj = &gameobjects[newId];
+    Object* newObj = StackPop(&stack);
+    asteroids[newAsteroid] = (Asteroid){ .object= newObj, .size = newSize };
 
     newObj->active = true;
     if (newObj->vertexCount < asteroidVertexCount || newObj->vertexCount == 0) {
@@ -648,7 +651,7 @@ void BreakAsteroid(Asteroid* asteroid, Object* obj) {
 //----------------------------------------------------------------------------------
 
 void SpawnSaucer(int type) {
-    Object* obj = &gameobjects[saucer.objId];
+    Object* obj = saucer.object;
 
     // Always Spawn on the RIM
     obj->active = true;
@@ -681,25 +684,30 @@ Vector2 shoot_at(Vector2 const shooter, Vector2 const interception, float bullet
 void LargeSaucerShoot() {
     int count = 0;
     for (int i = 0; i < MAX_ASTEROIDS; ++i) {
-        if (asteroids[i].objectId > 0) {
+        if (asteroids[i].object != NULL) {
             ++count;
         }
     }
 
     count = GetRandomValue(0, count - 1);
 
-    Object* target;
+    Object* target = NULL;
     int num = GetRandomValue(0, count - 1);
     for (int i = 0; i < MAX_ASTEROIDS; ++i) {
-        if (asteroids[i].objectId > 0) {
+        if (asteroids[i].object != NULL) {
             if (count == 0) {
-                target = &gameobjects[asteroids[i].objectId];
+                target = asteroids[i].object;
+                break;
             }
             --count;
         }
     }
+    if (target == NULL) {
+        TraceLog(LOG_ERROR, "Could not find target for saucer");
+        return;
+    }
 
-    Object* shooter = &gameobjects[saucer.objId];
+    Object* shooter = saucer.object;
     Vector2 p = intercept(shooter->position, bulletInitialVelocity, target->position, target->velocity);
     Vector2 bulletVel = shoot_at(shooter->position, p, bulletInitialVelocity);
 
@@ -712,7 +720,7 @@ void UpdateSaucer() {
     typedef void (*ShootFunc)();
     static ShootFunc shootFunc[2] = { LargeSaucerShoot, LargeSaucerShoot };
 
-    Object* obj = &gameobjects[saucer.objId];
+    Object* obj = saucer.object;
     if (obj->active) {
         if (!IsSoundPlaying(sounds[soundIds[saucer.type]])) {
             PlaySound(sounds[soundIds[saucer.type]]);
@@ -749,17 +757,17 @@ void UpdateSaucer() {
 bool CheckCollisions() {
 
     Object* ship = &gameobjects[0];
-    Object* saucerObj = &gameobjects[saucer.objId];
+    Object* saucerObj = saucer.object;
 
     for (int i = MAX_ASTEROIDS - 1; i >= 0; --i) {
         Asteroid* asteroid = &asteroids[i];
-        if (asteroid->objectId < 0) continue;
-        Object* aObj = &gameobjects[asteroid->objectId];
+        if (asteroid->object == NULL) continue;
+        Object* aObj = asteroid->object;
 
         // Check Collision of Asteroid w/ ship
         if (CheckCollisionCircles(ship->position, 0.5f * gameScale, aObj->position, 0.3f * asteroid->size * gameScale)) {
             TraceLog(LOG_INFO, "Ship hit by asteroid %d", i);
-            BreakAsteroid(asteroid, aObj);
+            BreakAsteroid(asteroid);
             BreakShip(ship);
             game.lives -= 1;
             return true;
@@ -767,11 +775,11 @@ bool CheckCollisions() {
 
         // Check Collision of Asteroid w/ ship bullets
         for (int j = 0; j < MAX_BULLETS; ++j) {
-            Object* bObj = &gameobjects[bullets[j].objectId];
+            Object* bObj = bullets[j].object;
             if (!bObj->active) continue;
             if (CheckCollisionPointCircle(bObj->position, aObj->position, 0.3f * asteroid->size * gameScale)) {
                 TraceLog(LOG_INFO, "Asteroid hit by bullet");
-                BreakAsteroid(asteroid, aObj);
+                BreakAsteroid(asteroid);
                 bullets[j].lifetime = -1;
                 bObj->active = false;
             }
@@ -779,7 +787,7 @@ bool CheckCollisions() {
     }
 
     if (saucerObj->active) {
-        if (CheckCollisionCircles(ship->position, 0.5f * gameScale, saucerObj->position, 0.7 * gameScale)) {
+        if (CheckCollisionCircles(ship->position, 0.5f * gameScale, saucerObj->position, 0.7f * gameScale)) {
             TraceLog(LOG_INFO, "Ship hit saucer");
             BreakShip(ship);
             game.lives -= 1;
@@ -835,14 +843,14 @@ void UpdateBackgroundSound() {
 
 void InitGameplayScreen(void)
 {
-    InitGameObjectStack();
+    InitGameObjectStack(&stack, gameobjects);
     InitParticleSystem(&particleSystem);
 
     game = (Game){ .score = 0, .lives = 3, .hyperspace = 2, .state = LEVEL_START, .stateTime = 0 };
     sound = (BackgroundSound){ .interval = 1, .elapsed = 0, .beat = SOUND_BEAT_1 };
 
     // Ship
-    Object* ship = &gameobjects[0];
+    Object* ship = StackPop(&stack);
     ship->vertexCount = 4;
     ship->active = true;
     ship->initialVertices = shipData;
@@ -850,18 +858,16 @@ void InitGameplayScreen(void)
     ResetShip();
 
     //Saucer
-    saucer = (Saucer){ .objId = 0, .maxBullets = 2, .shotElapsed = 0, .shotFreq = 1.5f, .type = 0, .noSaucerElapsed = 0 };
-    saucer.objId = StackPop(&stack);
-    Object* saucerObj = &gameobjects[saucer.objId];
-    saucerObj->active = false;
-    saucerObj->vertexCount = saucerVertexCount;
-    saucerObj->initialVertices = saucerDataLarge;
-    saucerObj->vertices = (Vector2*)RL_CALLOC(saucerObj->vertexCount, sizeof(Vector2));
+    saucer = (Saucer){ .object = 0, .maxBullets = 2, .shotElapsed = 0, .shotFreq = 1.5f, .type = 0, .noSaucerElapsed = 0 };
+    saucer.object = StackPop(&stack);
+    saucer.object->active = false;
+    saucer.object->vertexCount = saucerVertexCount;
+    saucer.object->initialVertices = saucerDataLarge;
+    saucer.object->vertices = (Vector2*)RL_CALLOC(saucerVertexCount, sizeof(Vector2));
 
 
     for (int i = 0; i < MAX_BULLETS; ++i) {
-        int objId = StackPop(&stack);
-        Object* obj = &gameobjects[objId];
+        Object* obj = StackPop(&stack);
         obj->active = false;
         obj->vertexCount = bullet_vertex_count;
         obj->initialVertices = bullet_data;
@@ -869,14 +875,13 @@ void InitGameplayScreen(void)
 
         Bullet* bullet = &bullets[i];
         bullet->lifetime = 0;
-        bullet->objectId = objId;
+        bullet->object = obj;
     }
 
     // Ship fragments
     for (int i = 0; i < 4; ++i) {
-        int objId = StackPop(&stack);
-        Object* obj = &gameobjects[objId];
-        shipDeadObjects[i] = objId;
+        Object* obj = StackPop(&stack);
+        shipDeadObjects[i] = obj;
         obj->active = false;
         obj->vertexCount = 2;
         obj->initialVertices = shipDeadData;
@@ -885,7 +890,7 @@ void InitGameplayScreen(void)
 
     // Asteroids are fully dynamic
     for (int i = 0; i < MAX_ASTEROIDS; ++i) {
-        asteroids[i] = (Asteroid){ -1, -1 };
+        asteroids[i] = (Asteroid){ .object = NULL, .size = -1 };
     }
 
 
