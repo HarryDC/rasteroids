@@ -646,6 +646,16 @@ void BreakAsteroid(Asteroid* asteroid) {
     newObj->rotVel = (float)GetRandomValue(-100, 100) / 1000.0f;
 }
 
+void ResetAsteroids() {
+    for (int i = 0; i < MAX_ASTEROIDS; ++i) {
+        if (asteroids[i].object != NULL) {
+            asteroids[i].object->active = false;
+            StackPush(&stack, asteroids[i].object);
+            asteroids[i] = (Asteroid){ .object = NULL, .size = -1 };
+        }
+    }
+}
+
 //----------------------------------------------------------------------------------
 // Saucer Functions
 //----------------------------------------------------------------------------------
@@ -803,7 +813,7 @@ void ResetLevel() {
     gameobjects[0].active = true;
     ResetBullets();
     ResetFragments();
-
+    ResetAsteroids();
     AddAsteroid();
     AddAsteroid();
     SetState(LEVEL_START);
@@ -970,9 +980,9 @@ void DrawGameplayScreen(void)
 {
     DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(), BLACK);
 
-    DrawTextEx(font, TextFormat("%i", game.score), (Vector2) { 20, 20 }, (float)font.baseSize, 1.0f,RAYWHITE);
+    DrawTextEx(smallFont, TextFormat("%i", game.score), (Vector2) { 20, 20 }, (float)smallFont.baseSize, 1.0f,RAYWHITE);
 
-    Vector2 pos = { 20, font.baseSize + 1.2f * gameScale };
+    Vector2 pos = { 20, smallFont.baseSize + 1.2f * gameScale };
 
     for (int i = 0; i < game.lives; ++i) {
         Vector2 start = Vector2Add(Vector2Scale(shipData[0], gameScale), pos);
@@ -997,7 +1007,7 @@ void DrawGameplayScreen(void)
     case LEVEL_START:
     {
         Vector2 center = (Vector2){ GetScreenWidth() / 2.0f - 17 , GetScreenHeight() / 2.0f - 2 };
-        DrawTextEx(font, "PLAYER 1", center, (float)font.baseSize, 1.0, RAYWHITE);
+        DrawTextEx(largeFont, "PLAYER 1", center, (float)largeFont.baseSize, 1.0, RAYWHITE);
     }
     }
 }

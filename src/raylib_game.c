@@ -24,7 +24,8 @@
 // NOTE: Those variables are shared between modules through screens.h
 //----------------------------------------------------------------------------------
 GameScreen currentScreen = LOGO;
-Font font = { 0 };
+Font smallFont = { 0 };
+Font largeFont = { 0 };
 
 
 static char* soundFiles[NUM_SOUNDS] = {
@@ -79,17 +80,18 @@ int main(void)
 
     // Load global data (assets that must be available in all screens, i.e. font)
     // font = LoadFont("resources/mecha.png");
-    TraceLog(LOG_INFO, GetWorkingDirectory());
-    font = LoadFont("resources/Hyperspace Bold.ttf");
+    TraceLog(LOG_INFO, "Loading Assets from : %s", GetWorkingDirectory());
+    smallFont = LoadFont("resources/Hyperspace Bold.ttf");
+    largeFont = LoadFontEx("resources/Hyperspace Bold.ttf", 72, NULL, 0);
 
     for (int i = 0; i < NUM_SOUNDS; ++i) {
         sounds[i] = LoadSound(soundFiles[i]);
     }
 
     // Setup and init first screen
-    currentScreen = GAMEPLAY;
+    currentScreen = TITLE;
     //InitLogoScreen();
-    InitGameplayScreen();
+    InitTitleScreen();
 
 #if defined(PLATFORM_WEB)
     emscripten_set_main_loop(UpdateDrawFrame, 60, 1);
@@ -117,7 +119,7 @@ int main(void)
     }
 
     // Unload global data loaded
-    UnloadFont(font);
+    UnloadFont(smallFont);
     
     for (int i = 0; i < NUM_SOUNDS; ++i) {
         UnloadSound(sounds[i]);

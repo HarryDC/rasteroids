@@ -44,7 +44,8 @@ typedef enum Sounds {
 // Global Variables Declaration (shared by several modules)
 //----------------------------------------------------------------------------------
 extern GameScreen currentScreen;
-extern Font font;
+extern Font smallFont;
+extern Font largeFont;
 extern Sound sounds[NUM_SOUNDS];
 
 #ifdef __cplusplus
@@ -87,14 +88,30 @@ void DrawGameplayScreen(void);
 void UnloadGameplayScreen(void);
 int FinishGameplayScreen(void);
 
-//----------------------------------------------------------------------------------
-// Ending Screen Functions Declaration
-//----------------------------------------------------------------------------------
 void InitEndingScreen(void);
 void UpdateEndingScreen(void);
 void DrawEndingScreen(void);
 void UnloadEndingScreen(void);
 int FinishEndingScreen(void);
+
+//----------------------------------------------------------------------------------
+// Highscore Handling
+//----------------------------------------------------------------------------------
+typedef struct Highscore
+{
+    char name[4];// 3 chars + 0
+    char score[32];
+} Highscore;
+
+#define MAX_HIGHSCORES 5
+
+bool LoadHigscores(const char* fileName, Highscore scores[], int maxScores);
+void WriteHigscores(const char* fileName, Highscore scores[], int maxScores);
+
+int IsHighscore(Highscore scores[], int maxScores, int score);
+void AddHighscore(Highscore scores[], int maxScores, int at, char* name, int score);
+void DrawHighscores(Font font, float top, float lineSpace, float gap, Highscore* scores, int maxScores);
+
 
 #ifdef __cplusplus
 }

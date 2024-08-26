@@ -26,6 +26,8 @@
 #include "raylib.h"
 #include "screens.h"
 
+Highscore scores[MAX_HIGHSCORES];
+
 //----------------------------------------------------------------------------------
 // Module Variables Definition (local)
 //----------------------------------------------------------------------------------
@@ -42,6 +44,13 @@ void InitTitleScreen(void)
     // TODO: Initialize TITLE screen variables here!
     framesCounter = 0;
     finishScreen = 0;
+
+    // Test Write Higscore
+    scores[0] = (Highscore) { "ANC", "1000" };
+    scores[1] = (Highscore) { "CDE", "900" };
+    scores[2] = (Highscore) { "EFG", "800" };
+    scores[3] = (Highscore) { "HIK", "700" };
+    scores[4] = (Highscore) { "KLM", "600" };
 }
 
 // Title Screen Update logic
@@ -61,10 +70,9 @@ void UpdateTitleScreen(void)
 void DrawTitleScreen(void)
 {
     // TODO: Draw TITLE screen here!
-    DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(), GREEN);
-    Vector2 pos = { 20, 10 };
-    DrawTextEx(font, "TITLE SCREEN", pos, font.baseSize*3.0f, 4, DARKGREEN);
-    DrawText("PRESS ENTER or TAP to JUMP to GAMEPLAY SCREEN", 120, 220, 20, DARKGREEN);
+    DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(), BLACK);
+
+    DrawHighscores(largeFont, GetScreenHeight() / 3.0f,(float)largeFont.baseSize * 1.05f , 200.0f, scores, MAX_HIGHSCORES);
 }
 
 // Title Screen Unload logic

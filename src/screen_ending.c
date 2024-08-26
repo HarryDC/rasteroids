@@ -32,6 +32,12 @@
 static int framesCounter = 0;
 static int finishScreen = 0;
 
+
+char* highscoreText = NULL;
+
+#define MAX_HIGSCORES 5
+static Highscore highscores[MAX_HIGSCORES];
+
 //----------------------------------------------------------------------------------
 // Ending Screen Functions Definition
 //----------------------------------------------------------------------------------
@@ -42,6 +48,8 @@ void InitEndingScreen(void)
     // TODO: Initialize ENDING screen variables here!
     framesCounter = 0;
     finishScreen = 0;
+
+    // Need HUD from main game
 }
 
 // Ending Screen Update logic
@@ -60,10 +68,11 @@ void UpdateEndingScreen(void)
 void DrawEndingScreen(void)
 {
     // TODO: Draw ENDING screen here!
-    DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(), BLUE);
+    DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(), BLACK);
+
 
     Vector2 pos = { 20, 10 };
-    DrawTextEx(font, "ENDING SCREEN", pos, font.baseSize*3.0f, 4, DARKBLUE);
+    DrawTextEx(smallFont, "ENDING SCREEN", pos, smallFont.baseSize*3.0f, 4, DARKBLUE);
     DrawText("PRESS ENTER or TAP to RETURN to TITLE SCREEN", 120, 220, 20, DARKBLUE);
 }
 
