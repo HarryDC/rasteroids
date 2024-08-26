@@ -1025,6 +1025,8 @@ void UnloadGameplayScreen(void)
 
     stack.current = 0;
     // TODO: Unload GAMEPLAY screen variables here!
+
+    lastGameScore = game.score;
 }
 
 // Gameplay Screen should finish?

@@ -76,10 +76,22 @@ void WriteHigscores(const char* fileName, Highscore scores[], int maxScores)
     SaveFileText(fileName, buffer);
 }
 
+void DrawCenteredLine(Font font, const char* text, float y, float spacing)
+{
+    Vector2 pos = MeasureTextEx(font, text, (float)font.baseSize * 1.0f, 1.0f);
+    pos.y = y;
+    pos.x = (GetScreenWidth() - pos.x) / 2.0f;
+    DrawTextEx(font,text, pos, (float)font.baseSize, 1.0f, WHITE);
+
+}
+
 void DrawHighscores(Font font, float top, float lineSpace, float gap, Highscore* scores, int maxScores)
 {
     Vector2 sizeName = MeasureTextEx(font, "AAA", (float)font.baseSize, 1.0);
     
+    DrawCenteredLine(font, "HIGHSCORES", top, 1.0f);
+    top = top + font.baseSize * 1.1f;
+
     float textXpos = ((float)GetScreenWidth() - gap) / 2.0f - sizeName.x;
     float numberXpos = ((float)GetScreenWidth() + gap) / 2.0f;
     float y = top;

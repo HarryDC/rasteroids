@@ -27,6 +27,7 @@ GameScreen currentScreen = LOGO;
 Font smallFont = { 0 };
 Font largeFont = { 0 };
 
+int lastGameScore = 0;
 
 static char* soundFiles[NUM_SOUNDS] = {
     "resources/bangLarge.wav",
@@ -87,6 +88,8 @@ int main(void)
     for (int i = 0; i < NUM_SOUNDS; ++i) {
         sounds[i] = LoadSound(soundFiles[i]);
     }
+
+    lastGameScore = 0;
 
     // Setup and init first screen
     currentScreen = TITLE;

@@ -34,6 +34,9 @@ Highscore scores[MAX_HIGHSCORES];
 static int framesCounter = 0;
 static int finishScreen = 0;
 
+static char* anyKey = "PUSH ENTER TO START";
+static Vector2 anyKeyPos = { 0 };
+
 //----------------------------------------------------------------------------------
 // Title Screen Functions Definition
 //----------------------------------------------------------------------------------
@@ -51,6 +54,10 @@ void InitTitleScreen(void)
     scores[2] = (Highscore) { "EFG", "800" };
     scores[3] = (Highscore) { "HIK", "700" };
     scores[4] = (Highscore) { "KLM", "600" };
+
+    Vector2 anyKeySize = MeasureTextEx(smallFont, anyKey, (float)smallFont.baseSize, 1.0);
+    anyKeyPos.x = (GetScreenWidth() - anyKeySize.x) / 2.0f;
+    anyKeyPos.y = 600;
 }
 
 // Title Screen Update logic
@@ -72,7 +79,11 @@ void DrawTitleScreen(void)
     // TODO: Draw TITLE screen here!
     DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(), BLACK);
 
-    DrawHighscores(largeFont, GetScreenHeight() / 3.0f,(float)largeFont.baseSize * 1.05f , 200.0f, scores, MAX_HIGHSCORES);
+    DrawTextEx(smallFont, TextFormat("%i", lastGameScore), (Vector2) { 20, 20 }, (float)smallFont.baseSize, 1.0f, RAYWHITE);
+
+    DrawHighscores(smallFont, GetScreenHeight() / 3.0f,(float)smallFont.baseSize * 1.05f , 200.0f, scores, MAX_HIGHSCORES);
+
+    DrawTextEx(smallFont, "PUSH ANY KEY TO START", anyKeyPos, (float)smallFont.baseSize, 1.0f, RAYWHITE);
 }
 
 // Title Screen Unload logic
