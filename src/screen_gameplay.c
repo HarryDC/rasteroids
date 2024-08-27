@@ -48,21 +48,15 @@ Alien Ship (small)  0.75
 
 */
 
-/* Notes: 
-    Concept of "alive" differs, for the bullet its, gameobject->active, for the asteroid it's asteroid->gameobject != -1 
-
-*/
-
-// TODO Hyperspace UI
+// TODO Use non bold font for large text
+// TODO Fix Asteroid speeds (smaller faster)
 // TODO Thrust Graphics
 // TODO Level Progression
-// TODO Function to center text
-// TODO Gain Bonus ship
-// TODO Small Saucer brain
-// TODO Fix Asteroid speeds (smaller faster)
+// TODO Small Saucer brain, have it avoid asteroids
 // TODO Speed up background pulse with level progression
 // TODO scale velocity over dt
 // TODO Add pause
+// TODO Make Layout relative to screen size ? 
 
 //----------------------------------------------------------------------------------
 // Module Variables Definition (local)
@@ -118,6 +112,11 @@ static Vector2 shipDeadData[2] = {
     {0, -0.25f}
 };
 static Object* shipDeadObjects[4] = { NULL };
+
+static int nextShipInterval = 5000;
+static int nextShip = 5000;
+static int nextHyperSpaceInverval = 2500;
+static int nextHyperspace = 2500;
 
 //----------------------------------------------------------------------------------
 // Bullet Definition
@@ -921,6 +920,16 @@ void UpdateGameplayScreen(void)
     game.dt = GetFrameTime();
     game.stateTime += game.dt;
 
+    if (game.score > nextShip) {
+        game.lives += 1;
+        nextShip += nextShipInterval;
+    }
+
+    if (game.score > nextHyperspace) {
+        game.hyperspace += 1;
+        nextHyperspace += nextHyperSpaceInverval;
+    }
+
     // Press enter or tap to change to ENDING screen
     if (IsKeyPressed(KEY_ENTER) || IsGestureDetected(GESTURE_TAP))
     {
@@ -995,6 +1004,14 @@ void DrawGameplayScreen(void)
         pos.x += .8f * gameScale;
     }
 
+    pos = (Vector2){ 15, pos.y + 1.2f * gameScale };
+
+    for (int i = 0; i < game.hyperspace; ++i) {
+        DrawRectangleLines(pos.x, pos.y, 10, 20, RAYWHITE);
+        pos.x += .8f * gameScale;
+    }
+
+    pos.x += 10;
     for (int i = 0; i < MAX_GAME_OBJECTS; ++i) {
         Object* obj = &gameobjects[i];
         if (!obj->active) continue;
@@ -1006,8 +1023,13 @@ void DrawGameplayScreen(void)
     switch (game.state) {
     case LEVEL_START:
     {
-        Vector2 center = (Vector2){ GetScreenWidth() / 2.0f - 17 , GetScreenHeight() / 2.0f - 2 };
-        DrawTextLineCentered(largeFont, "PLAYER 1", GetScreenHeight() / 2.0, 1.0);
+        DrawTextLineCentered(largeFont, "PLAYER 1", GetScreenHeight() / 2.0f, 1.0);
+        break;
+    }
+    case HYPERSPACE: 
+    {
+        DrawTextLineCentered(largeFont, "HYPERSPACE", GetScreenHeight() / 3.0f, 1.0);
+        break;
     }
     }
 }

@@ -93,9 +93,8 @@ int main(void)
     lastGameScore = 0;
 
     // Setup and init first screen
-    currentScreen = ENDING;
-    InitEndingScreen();
-    //InitTitleScreen();
+    currentScreen = TITLE;
+    InitTitleScreen();
 
 #if defined(PLATFORM_WEB)
     emscripten_set_main_loop(UpdateDrawFrame, 60, 1);
