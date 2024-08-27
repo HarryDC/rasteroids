@@ -1007,7 +1007,7 @@ void DrawGameplayScreen(void)
     case LEVEL_START:
     {
         Vector2 center = (Vector2){ GetScreenWidth() / 2.0f - 17 , GetScreenHeight() / 2.0f - 2 };
-        DrawTextEx(largeFont, "PLAYER 1", center, (float)largeFont.baseSize, 1.0, RAYWHITE);
+        DrawTextLineCentered(largeFont, "PLAYER 1", GetScreenHeight() / 2.0, 1.0);
     }
     }
 }

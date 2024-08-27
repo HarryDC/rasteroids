@@ -43,6 +43,7 @@ static char* soundFiles[NUM_SOUNDS] = {
 };
 
 Sound sounds[NUM_SOUNDS] = {0};
+Highscore scores[MAX_HIGHSCORES];
 
 //----------------------------------------------------------------------------------
 // Local Variables Definition (local to this module)
@@ -92,9 +93,9 @@ int main(void)
     lastGameScore = 0;
 
     // Setup and init first screen
-    currentScreen = TITLE;
-    //InitLogoScreen();
-    InitTitleScreen();
+    currentScreen = ENDING;
+    InitEndingScreen();
+    //InitTitleScreen();
 
 #if defined(PLATFORM_WEB)
     emscripten_set_main_loop(UpdateDrawFrame, 60, 1);

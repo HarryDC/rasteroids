@@ -4,12 +4,22 @@
 #include "raylib.h"
 #include "screens.h"
 
+static void SetDefaultScores(Highscore scores[], int maxScores)
+{
+    int high = 15000;
+    for (int i = 0; i < maxScores; ++i) {
+        strcpy_s(scores[i].name, 4, "HAS");
+        sprintf_s(scores[i].score, 32, "%i", high);
+        high -= 2000;
+    }
+}
 
-bool LoadHigscores(const char* fileName, Highscore scores[], int maxScores) {
+void LoadHigscores(const char* fileName, Highscore scores[], int maxScores) {
     char* highscoreText = LoadFileText(fileName);
     if (highscoreText == 0) {
         TraceLog(LOG_WARNING, "Could not load highscores file %s/%s", GetWorkingDirectory(), "high.txt");
-        return false;
+        SetDefaultScores(scores, maxScores);
+        return;
     }
 
     int count = 0;
@@ -17,6 +27,7 @@ bool LoadHigscores(const char* fileName, Highscore scores[], int maxScores) {
 
     if (count < 2 || count % 2 != 0) {
         TraceLog(LOG_WARNING, "Invalid forma for highscore file");
+        SetDefaultScores(scores, maxScores);
         count = 0;
     }
 
@@ -28,11 +39,9 @@ bool LoadHigscores(const char* fileName, Highscore scores[], int maxScores) {
     }
     
     UnloadFileText(highscoreText);
-
-    return count != 0;
 }
 
-int IsHighscore(Highscore scores[], int maxScores, int score) {
+int GetHighscorePosition(Highscore scores[], int maxScores, int score) {
     int found = -1;
     for (int i = maxScores - 1; i >= 0; --i) {
         if (score < TextToInteger(scores[i].score)) {
@@ -76,7 +85,7 @@ void WriteHigscores(const char* fileName, Highscore scores[], int maxScores)
     SaveFileText(fileName, buffer);
 }
 
-void DrawCenteredLine(Font font, const char* text, float y, float spacing)
+void DrawTextLineCentered(Font font, const char* text, float y, float spacing)
 {
     Vector2 pos = MeasureTextEx(font, text, (float)font.baseSize * 1.0f, 1.0f);
     pos.y = y;
@@ -89,7 +98,7 @@ void DrawHighscores(Font font, float top, float lineSpace, float gap, Highscore*
 {
     Vector2 sizeName = MeasureTextEx(font, "AAA", (float)font.baseSize, 1.0);
     
-    DrawCenteredLine(font, "HIGHSCORES", top, 1.0f);
+    DrawTextLineCentered(font, "HIGHSCORES", top, 1.0f);
     top = top + font.baseSize * 1.1f;
 
     float textXpos = ((float)GetScreenWidth() - gap) / 2.0f - sizeName.x;

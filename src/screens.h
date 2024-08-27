@@ -48,6 +48,7 @@ extern Font smallFont;
 extern Font largeFont;
 extern Sound sounds[NUM_SOUNDS];
 
+
 extern int lastGameScore;
 
 #ifdef __cplusplus
@@ -106,15 +107,15 @@ typedef struct Highscore
 } Highscore;
 
 #define MAX_HIGHSCORES 5
+extern Highscore scores[MAX_HIGHSCORES];
 
-
-bool LoadHigscores(const char* fileName, Highscore scores[], int maxScores);
+void LoadHigscores(const char* fileName, Highscore scores[], int maxScores);
 void WriteHigscores(const char* fileName, Highscore scores[], int maxScores);
 
-int IsHighscore(Highscore scores[], int maxScores, int score);
+int GetHighscorePosition(Highscore scores[], int maxScores, int score);
 void AddHighscore(Highscore scores[], int maxScores, int at, char* name, int score);
 
-void DrawCenteredLine(Font font, const char* text, float y, float spacing);
+void DrawTextLineCentered(Font font, const char* text, float y, float spacing);
 void DrawHighscores(Font font, float top, float lineSpace, float gap, Highscore* scores, int maxScores);
 
 

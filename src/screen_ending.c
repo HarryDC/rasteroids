@@ -24,6 +24,7 @@
 **********************************************************************************************/
 
 #include "raylib.h"
+#include "raymath.h"
 #include "screens.h"
 
 //----------------------------------------------------------------------------------
@@ -32,11 +33,17 @@
 static int framesCounter = 0;
 static int finishScreen = 0;
 
+#define CHAR_COUNT 27
+static char availableCharacters[CHAR_COUNT] = "   ";
+static int cursorPos = 0;
+static char *inputChars = "   ";
+static int currentChar = 0;
+static char* text[2] = { "You qualified for a high score, enter it",
+"using the left and right keys and shot to confirm." };
 
-char* highscoreText = NULL;
-
-#define MAX_HIGSCORES 5
-static Highscore highscores[MAX_HIGSCORES];
+static float editBlinkInterval = 0.5f;
+static float editBlinkCurrent = 0.0f;
+static bool currentBlinkState = true;
 
 //----------------------------------------------------------------------------------
 // Ending Screen Functions Definition
@@ -45,41 +52,84 @@ static Highscore highscores[MAX_HIGSCORES];
 // Ending Screen Initialization logic
 void InitEndingScreen(void)
 {
+    LoadHigscores("hight.txt", scores, MAX_HIGHSCORES);
     // TODO: Initialize ENDING screen variables here!
     framesCounter = 0;
     finishScreen = 0;
 
-    // Need HUD from main game
+    editBlinkCurrent = editBlinkInterval;
+
+    if (GetHighscorePosition(scores, MAX_HIGHSCORES, lastGameScore) < 0)
+    {
+        finishScreen = 1;
+    }
+
+    availableCharacters[0] = ' ';
+    char currentChar = 'A';
+    for (int i = 1; i < CHAR_COUNT; ++i, ++currentChar) {
+        availableCharacters[i] = currentChar;
+    }
 }
 
 // Ending Screen Update logic
 void UpdateEndingScreen(void)
 {
-    // TODO: Update ENDING screen variables here!
-
-    // Press enter or tap to return to TITLE screen
-    if (IsKeyPressed(KEY_ENTER) || IsGestureDetected(GESTURE_TAP))
-    {
-        finishScreen = 1;
+    if (IsKeyPressed(KEY_SPACE)) {
+        ++cursorPos;
     }
+    if (cursorPos >= 3) {
+        finishScreen = 1;
+        int pos = GetHighscorePosition(scores, MAX_HIGHSCORES, lastGameScore);
+        AddHighscore(scores, MAX_HIGHSCORES, pos, inputChars, lastGameScore);
+        WriteHigscores("hight.txt", scores, MAX_HIGHSCORES);
+        return;
+    }
+    if (IsKeyPressed(KEY_D)) {
+        currentChar++;
+    }
+    if (IsKeyPressed(KEY_A)) {
+        currentChar--;
+    }
+
+    currentChar = (currentChar + CHAR_COUNT) % CHAR_COUNT;
+    inputChars[cursorPos] = availableCharacters[currentChar];
 }
 
 // Ending Screen Draw logic
 void DrawEndingScreen(void)
 {
+    char* charText = " ";
+    editBlinkCurrent -= GetFrameTime();
+    if (editBlinkCurrent < 0) {
+        editBlinkCurrent = editBlinkInterval;
+        currentBlinkState = !currentBlinkState;
+    }
+
     // TODO: Draw ENDING screen here!
     DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(), BLACK);
+        
+    float y = (float)GetScreenHeight() / 3.0f;
+    for (int i = 0; i < 2; ++i) {
+        DrawTextLineCentered(smallFont, text[i], y, 1.0);
+        y += (float)largeFont.baseSize * 1.1f;
+    }
 
+    float charWidth = 40;
+    float x = (float)GetScreenWidth() / 2.0f - charWidth - charWidth / 2.0f;
 
-    Vector2 pos = { 20, 10 };
-    DrawTextEx(smallFont, "ENDING SCREEN", pos, smallFont.baseSize*3.0f, 4, DARKBLUE);
-    DrawText("PRESS ENTER or TAP to RETURN to TITLE SCREEN", 120, 220, 20, DARKBLUE);
+    for (int i = 0; i < 3; ++i) {
+        if (i == cursorPos && currentBlinkState) {
+            DrawTextEx(largeFont, "_", (Vector2) { x, y }, (float)largeFont.baseSize, 1.0, RAYWHITE);
+        }
+        charText[0] = inputChars[i];
+        DrawTextEx(largeFont, charText, (Vector2) { x, y }, (float)largeFont.baseSize, 1.0, RAYWHITE);
+        x = x + charWidth;
+    }
 }
 
 // Ending Screen Unload logic
 void UnloadEndingScreen(void)
 {
-    // TODO: Unload ENDING screen variables here!
 }
 
 // Ending Screen should finish?

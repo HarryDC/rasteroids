@@ -26,8 +26,6 @@
 #include "raylib.h"
 #include "screens.h"
 
-Highscore scores[MAX_HIGHSCORES];
-
 //----------------------------------------------------------------------------------
 // Module Variables Definition (local)
 //----------------------------------------------------------------------------------
@@ -44,20 +42,16 @@ static Vector2 anyKeyPos = { 0 };
 // Title Screen Initialization logic
 void InitTitleScreen(void)
 {
+ 
     // TODO: Initialize TITLE screen variables here!
     framesCounter = 0;
     finishScreen = 0;
 
-    // Test Write Higscore
-    scores[0] = (Highscore) { "ANC", "1000" };
-    scores[1] = (Highscore) { "CDE", "900" };
-    scores[2] = (Highscore) { "EFG", "800" };
-    scores[3] = (Highscore) { "HIK", "700" };
-    scores[4] = (Highscore) { "KLM", "600" };
-
     Vector2 anyKeySize = MeasureTextEx(smallFont, anyKey, (float)smallFont.baseSize, 1.0);
     anyKeyPos.x = (GetScreenWidth() - anyKeySize.x) / 2.0f;
     anyKeyPos.y = 600;
+
+    LoadHigscores("hight.txt", scores, MAX_HIGHSCORES);
 }
 
 // Title Screen Update logic
