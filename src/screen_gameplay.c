@@ -56,7 +56,9 @@ Alien Ship (small)  0.75
 // TODO Speed up background pulse with level progression
 // TODO scale velocity over dt
 // TODO Add pause
-// TODO Make Layout relative to screen size ? 
+// TODO Fullscreen mode (16:10 Aspect Ratio check ...) 
+// TODO Add Instructions
+// TODO GamePad Support 
 
 //----------------------------------------------------------------------------------
 // Module Variables Definition (local)

@@ -29,7 +29,7 @@
 //----------------------------------------------------------------------------------
 // Types and Structures Definition
 //----------------------------------------------------------------------------------
-typedef enum GameScreen { UNKNOWN = -1, LOGO = 0, TITLE, OPTIONS, GAMEPLAY, ENDING } GameScreen;
+typedef enum GameScreen { UNKNOWN = -1, LOGO = 0, TITLE, OPTIONS, GAMEPLAY, ENDING, SCREENS_COUNT } GameScreen;
 
 typedef enum Sounds {
     SOUND_BANG_LARGE, SOUND_BANG_MEDIUM, SOUND_BANG_SMALL, 
