@@ -6,10 +6,11 @@
 
 static void SetDefaultScores(Highscore scores[], int maxScores)
 {
-    int high = 15000;
+    int high = 8000;
     for (int i = 0; i < maxScores; ++i) {
-        strcpy_s(scores[i].name, 4, "HAS");
-        sprintf_s(scores[i].score, 32, "%i", high);
+        
+        TextCopy(scores[i].name, "HAS");
+        TextCopy(scores[i].score, TextFormat("%i", high));
         high -= 2000;
     }
 }
@@ -33,8 +34,8 @@ void LoadHigscores(const char* fileName, Highscore scores[], int maxScores) {
 
     int i = 0;
     while (i < count && i / 2 < maxScores) {
-        strcpy_s(scores[i / 2].name, 4, splits[i]);
-        strcpy_s(scores[i / 2].score, 32, splits[i + 1]);
+        TextCopy(scores[i / 2].name, splits[i]);
+        TextCopy(scores[i / 2].score, splits[i + 1]);
         i += 2;
     }
     
@@ -60,13 +61,13 @@ void AddHighscore(Highscore scores[], int maxScores, int at, char* name, int sco
 
     if (at >= 0) {
         for (int i = maxScores - 1; i >= at + 1; --i) {
-            strcpy_s(scores[i].name, 4, scores[i - 1].name);
-            strcpy_s(scores[i].score, 32, scores[i - 1].score);
+            TextCopy(scores[i].name, scores[i - 1].name);
+            TextCopy(scores[i].score, scores[i - 1].score);
         }
     }
 
-    strcpy_s(scores[at].name, 4, name);
-    sprintf_s(scores[at].score, 32, "%i", score);
+    TextCopy(scores[at].name, name);
+    TextCopy(scores[at].score, TextFormat("%i", score));
 }
 
 void WriteHigscores(const char* fileName, Highscore scores[], int maxScores)
@@ -75,11 +76,11 @@ void WriteHigscores(const char* fileName, Highscore scores[], int maxScores)
 
     char buffer[1024] = { 0 };
     for (int i = 0; i < maxScores; ++i) {
-        strcat_s(buffer, 1024, scores[i].name);
-        strcat_s(buffer, 1024, comma);
-        strcat_s(buffer, 1024, scores[i].score);
+        strcat(buffer, scores[i].name);
+        strcat(buffer, comma);
+        strcat(buffer, scores[i].score);
         if (i < maxScores - 1) {
-            strcat_s(buffer, 1024, comma);
+            strcat(buffer, comma);
         }
     }
     SaveFileText(fileName, buffer);

@@ -28,7 +28,6 @@
 #include "screens.h"
 
 #include "malloc.h"
-#include <xkeycheck.h>
 
 //----------------------------------------------------------------------------------
 // Data: see https://www.retrogamedeconstructionzone.com/2019/10/asteroids-by-numbers.html
@@ -1009,7 +1008,7 @@ void DrawGameplayScreen(void)
     pos = (Vector2){ 15, pos.y + 1.2f * gameScale };
 
     for (int i = 0; i < game.hyperspace; ++i) {
-        DrawRectangleLines(pos.x, pos.y, 10, 20, RAYWHITE);
+        DrawRectangleLines((int)pos.x, (int)pos.y, 10, 20, RAYWHITE);
         pos.x += .8f * gameScale;
     }
 
