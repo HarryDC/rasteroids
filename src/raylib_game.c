@@ -86,8 +86,8 @@ int main(void)
     // Load global data (assets that must be available in all screens, i.e. font)
     // font = LoadFont("resources/mecha.png");
     TraceLog(LOG_INFO, "Loading Assets from : %s", GetWorkingDirectory());
-    smallFont = LoadFont("resources/Hyperspace Bold.ttf");
-    largeFont = LoadFontEx("resources/Hyperspace Bold.ttf", 72, NULL, 0);
+    smallFont = LoadFont("resources/Hyperspace.ttf");
+    largeFont = LoadFontEx("resources/Hyperspace.ttf", 72, NULL, 0);
 
     for (int i = 0; i < NUM_SOUNDS; ++i) {
         sounds[i] = LoadSound(soundFiles[i]);

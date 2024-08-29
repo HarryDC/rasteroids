@@ -53,7 +53,6 @@ Alien ships (both sizes)	4 - 6.5 (depending on your score)
 Bullets	                    17 (ship at rest)
 */
 
-// TODO Use non bold font for large text
 // TODO Level Progression
 // TODO Small Saucer brain, have it avoid asteroids
 // TODO Speed up background pulse with level progression
