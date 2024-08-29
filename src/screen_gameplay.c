@@ -47,9 +47,8 @@ Alien Ship (small)  0.75
 
 */
 
-// TODO Use non bold font for large text
 // TODO Fix Asteroid speeds (smaller faster)
-// TODO Thrust Graphics
+// TODO Use non bold font for large text
 // TODO Level Progression
 // TODO Small Saucer brain, have it avoid asteroids
 // TODO Speed up background pulse with level progression
@@ -57,7 +56,7 @@ Alien Ship (small)  0.75
 // TODO Add pause
 // TODO Fullscreen mode (16:10 Aspect Ratio check ...) 
 // TODO Add Instructions
-// TODO GamePad Support 
+// TODO Key and Button Map
 
 //----------------------------------------------------------------------------------
 // Module Variables Definition (local)
@@ -92,14 +91,28 @@ static Object gameobjects[MAX_GAME_OBJECTS] = { 0 };
 //----------------------------------------------------------------------------------
 
 // Nominally 1 long
-static Vector2 shipData[4] = {
+static Vector2 shipVertices[4] = {
     {-0.25f, 0.5f},
     {0.0f, -0.5f},
     {0.25f, 0.5f},
     {-0.25f, 0.5f},
 };
-
 static int shipVertexCount = 4;
+
+static Vector2 shipThrustVertices[2][3] = {
+{
+    {-0.20f, 0.6f + 0.25f},
+    {0.0, 0.6f},
+    {0.20f, 0.6f + 0.25f}
+},
+{
+    {-0.20f, 0.9f + 0.25f},
+    {0.0, 0.9f},
+    {0.20f, 0.9f + 0.25f}
+},
+
+};
+static int shipThrustVertexCount = 3;
 
 static float shipRotationFactor = 2.0f;
 static float shipAccelrationFactor = .2f;
@@ -108,29 +121,37 @@ static float shipMaxSpeed = 14.0f;
 static float shipSpeedCutoff = 0.05f;
 static float gameScale = 28;
 
-static Vector2 shipDeadData[2] = {
+static Vector2 shipDebrisVertices[2] = {
     {0, 0.25f},
     {0, -0.25f}
 };
-static Object* shipDeadObjects[4] = { NULL };
+static int shipDebrisVertexCount = 2;
 
 static int nextShipInterval = 5000;
 static int nextShip = 5000;
 static int nextHyperSpaceInverval = 2500;
 static int nextHyperspace = 2500;
 
+typedef struct Ship {
+    Object* ship;
+    Object* thrust[2];
+    Object* debris[4];
+} ShipParts;
+
+static ShipParts parts;
+
 //----------------------------------------------------------------------------------
 // Bullet Definition
 //---------------------------------------------------------------------------------- 
 
-static Vector2 bullet_data[5] = {
+static Vector2 bulletVertices[5] = {
     {-0.1f, -0.1f},
     {0.1f, -0.1f},
     {0.1f, 0.1f},
     {-0.1f, 0.1f},
     {-0.1f, -0.1f}
 };
-static const int bullet_vertex_count = 5;
+static const int bulletVertexCount = 5;
 
 
 #define MAX_BULLETS 5
@@ -214,6 +235,17 @@ Saucer saucer;
 //----------------------------------------------------------------------------------
 // Game global Definition
 //---------------------------------------------------------------------------------- 
+
+enum Input {
+    INPUT_NONE,
+    INPUT_LEFT = 0x1,
+    INPUT_RIGHT = 0x2,
+    INPUT_THRUST = 0x4,
+    INPUT_HYPER = 0x8,
+    INPUT_SHOOT = 0x10,
+};
+
+static int currentInput = 0;
 
 enum GameState {
     LEVEL_START,
@@ -301,11 +333,30 @@ Object* StackPop(Stack* stack) {
 }
 
 // Assumes stack and objects have the same size 
-void InitGameObjectStack(Stack *stack, Object objects[]) {
+void StackInit(Stack *stack, Object objects[]) {
     stack->size = MAX_GAME_OBJECTS;
     for (int i = stack->size-1; i >= 0; --i) {
         StackPush(stack, &objects[i]);
     }
+}
+
+// Conservative Reinitialization
+void ObjectInit(Object* obj, Vector2* initialVertices, int vertexCount)
+{
+    if (obj == NULL) {
+        TraceLog(LOG_FATAL, "ObjectInit called with obj null");
+        return;
+    }
+    if (initialVertices == NULL) {
+        TraceLog(LOG_FATAL, "ObjectInit called with initialVertices null");
+        return;
+    }
+
+    free(obj->vertices);
+    *obj = (Object){ 0 };
+    obj->initialVertices = initialVertices;
+    obj->vertexCount = vertexCount;
+    obj->vertices = (Vector2*)RL_CALLOC(vertexCount, sizeof(Vector2));
 }
 
 void SetState(int state) {
@@ -402,7 +453,7 @@ void SpawnExplosion(ParticleSystem* system, Vector2 pos, int count) {
 
 // Resets Ship to original position and orientation
 void ResetShip() {
-    Object* ship = &gameobjects[0];
+    Object* ship = parts.ship;
     ship->active = true;
     ship->position = (Vector2){ GetScreenWidth() / 2.0f, GetScreenHeight() / 2.0f };
     ship->velocity = Vector2Zero();
@@ -421,7 +472,7 @@ void ResetBullets() {
 
 void ResetFragments() {
     for (int i = 0; i < 4; ++i) {
-        shipDeadObjects[i]->active = false;
+        parts.debris[i]->active = false;
     }
 }
 
@@ -436,18 +487,41 @@ bool CheckCollisionAsteroids(Vector2 pos, float radius) {
     return false; 
 }
 
+int UpdateInput()
+{
+    int input = 0;
+    // TraceLog(LOG_INFO, "Button: %i", GetGamepadButtonPressed());
+    if (IsKeyDown(KEY_A) || IsGamepadButtonDown(0, 9)) {
+        input = input | INPUT_LEFT;
+    }
+    if (IsKeyDown(KEY_D) || IsGamepadButtonDown(0, 11)) {
+        input = input | INPUT_RIGHT;
+    }
+    if (IsKeyDown(KEY_S) || IsGamepadButtonDown(0, 3)) {
+        input = input | INPUT_HYPER;
+    }
+    if (IsKeyDown(KEY_W) || IsGamepadButtonDown(0, 7)) {
+        input = input | INPUT_THRUST;
+    }
+    if (IsKeyPressed(KEY_SPACE) || IsGamepadButtonPressed(0, 8)) {
+        input = input | INPUT_SHOOT;
+    }
+    return input;
+}
+
+
 // React to user input, calculate new orientation, spawn bullets
 void UpdateShip(Object* ship) {
-
-    if (IsKeyDown(KEY_A))
+    int input = UpdateInput();
+    if ((input & INPUT_LEFT) != 0)
     {
         ship->rot -= shipRotationFactor;
     }
-    else if (IsKeyDown(KEY_D)) {
+    if ((input & INPUT_RIGHT) != 0) {
         ship->rot += shipRotationFactor;
     }
 
-    if (IsKeyDown(KEY_S) && game.hyperspace > 0) {
+    if ( ((input & INPUT_HYPER) != 0) && game.hyperspace > 0) {
         SetState(HYPERSPACE);
         // Calculate new position for ship, trying to get a bit of 
         // distance from any asteroids
@@ -465,8 +539,22 @@ void UpdateShip(Object* ship) {
 
     Vector2 fwd = Vector2Rotate(yUp, ship->rot * PI / 180.0f);
     Vector2 accell = Vector2Scale(fwd, .1f);
-    if (IsKeyDown(KEY_W)) {
+    if ((input & INPUT_THRUST) != 0) {
         ship->velocity = Vector2Add(ship->velocity, accell);
+
+        for (int i = 0; i < 2; ++i) {
+            Object* obj = parts.thrust[i];
+            obj->active = true;
+            obj->position = ship->position;
+            obj->velocity = ship->velocity;
+            obj->rot = ship->rot;
+            obj->rotVel = ship->rotVel;
+        }
+    }
+    else {
+        for (int i = 0; i < 2; ++i) {
+            parts.thrust[i]->active = false;
+        }
     }
 
     float mag = Vector2Length(ship->velocity);
@@ -478,7 +566,7 @@ void UpdateShip(Object* ship) {
     }
 
     // Spawn Bullets and shoot
-    bool doShoot = IsKeyPressed(KEY_SPACE);
+    bool doShoot = (input & INPUT_SHOOT) != 0;
 
     for (int i = 0; i < MAX_BULLETS; ++i) {
         bullets[i].lifetime = Clamp(bullets[i].lifetime - game.dt, -1.0f, 999.0f);
@@ -501,10 +589,10 @@ void UpdateShip(Object* ship) {
     // TODO Draw Engine graphics when firing
 }
 
-void BreakShip(Object* ship) {
+void BreakShip(Object* ship, Object* debris[], int debrisCount) {
     ship->active = false;
-    for (int i = 0; i < 3; ++i) {
-        Object* obj = shipDeadObjects[i];
+    for (int i = 0; i < debrisCount; ++i) {
+        Object* obj = debris[i];
         obj->active = true;
         obj->position = ship->vertices[i];
         obj->velocity = Vector2Scale(Vector2Subtract(obj->position, ship->position), 0.01f);
@@ -766,7 +854,7 @@ void UpdateSaucer() {
 // Returns true if ship was destroyed
 bool CheckCollisions() {
 
-    Object* ship = &gameobjects[0];
+    Object* ship = parts.ship;
     Object* saucerObj = saucer.object;
 
     for (int i = MAX_ASTEROIDS - 1; i >= 0; --i) {
@@ -778,7 +866,7 @@ bool CheckCollisions() {
         if (CheckCollisionCircles(ship->position, 0.5f * gameScale, aObj->position, 0.3f * asteroid->size * gameScale)) {
             TraceLog(LOG_INFO, "Ship hit by asteroid %d", i);
             BreakAsteroid(asteroid);
-            BreakShip(ship);
+            BreakShip(ship, parts.debris, 3);
             game.lives -= 1;
             return true;
         }
@@ -799,7 +887,7 @@ bool CheckCollisions() {
     if (saucerObj->active) {
         if (CheckCollisionCircles(ship->position, 0.5f * gameScale, saucerObj->position, 0.7f * gameScale)) {
             TraceLog(LOG_INFO, "Ship hit saucer");
-            BreakShip(ship);
+            BreakShip(ship, parts.debris, 3);
             game.lives -= 1;
             return true;
         }
@@ -820,9 +908,8 @@ void ResetLevel() {
 }
 
 void UpdateGameObjects() {
-    for (int i = 0; i < MAX_GAME_OBJECTS; ++i) {
-        Object* obj = &gameobjects[i];
-
+    Object* obj = &gameobjects[0];
+    for (int i = 0; i < MAX_GAME_OBJECTS; ++i, ++obj) {
         if (!obj->active) continue;
 
         obj->position = Vector2Add(obj->position, obj->velocity);
@@ -853,19 +940,28 @@ void UpdateBackgroundSound() {
 
 void InitGameplayScreen(void)
 {
-    InitGameObjectStack(&stack, gameobjects);
+    StackInit(&stack, gameobjects);
     InitParticleSystem(&particleSystem);
 
     game = (Game){ .score = 0, .lives = 3, .hyperspace = 2, .state = LEVEL_START, .stateTime = 0 };
     sound = (BackgroundSound){ .interval = 1, .elapsed = 0, .beat = SOUND_BEAT_1 };
 
     // Ship
-    Object* ship = StackPop(&stack);
-    ship->vertexCount = 4;
-    ship->active = true;
-    ship->initialVertices = shipData;
-    ship->vertices = (Vector2*)RL_CALLOC(ship->vertexCount, sizeof(Vector2));
+    parts.ship = StackPop(&stack);
+    ObjectInit(parts.ship, shipVertices, shipVertexCount);
     ResetShip();
+
+    // Ship Debris
+    for (int i = 0; i < 4; ++i) {
+        parts.debris[i] = StackPop(&stack);
+        ObjectInit(parts.debris[i], shipDebrisVertices, shipDebrisVertexCount);;
+    }
+
+    // Thust Graphics
+    for (int i = 0; i < 2; ++i) {
+        parts.thrust[i] = StackPop(&stack);
+        ObjectInit(parts.thrust[i], shipThrustVertices[i], shipThrustVertexCount);
+    }
 
     //Saucer
     saucer = (Saucer){ .object = 0, .maxBullets = 2, .shotElapsed = 0, .shotFreq = 1.5f, .type = 0, .noSaucerElapsed = 0 };
@@ -877,32 +973,15 @@ void InitGameplayScreen(void)
 
 
     for (int i = 0; i < MAX_BULLETS; ++i) {
-        Object* obj = StackPop(&stack);
-        obj->active = false;
-        obj->vertexCount = bullet_vertex_count;
-        obj->initialVertices = bullet_data;
-        obj->vertices = (Vector2*)RL_CALLOC(obj->vertexCount, sizeof(Vector2));
-
-        Bullet* bullet = &bullets[i];
-        bullet->lifetime = 0;
-        bullet->object = obj;
-    }
-
-    // Ship fragments
-    for (int i = 0; i < 4; ++i) {
-        Object* obj = StackPop(&stack);
-        shipDeadObjects[i] = obj;
-        obj->active = false;
-        obj->vertexCount = 2;
-        obj->initialVertices = shipDeadData;
-        obj->vertices = (Vector2*)RL_CALLOC(ship->vertexCount, sizeof(Vector2));
+        bullets[i] = (Bullet){ 0 };
+        bullets[i].object = StackPop(&stack);
+        ObjectInit(bullets[i].object, bulletVertices, bulletVertexCount);
     }
 
     // Asteroids are fully dynamic
     for (int i = 0; i < MAX_ASTEROIDS; ++i) {
         asteroids[i] = (Asteroid){ .object = NULL, .size = -1 };
     }
-
 
     for (int i = 0; i < asteroidVertexCount; ++i) {
         asteroidDataMedium[i] = Vector2Scale(asteroidDataLarge[i], .5);
@@ -959,7 +1038,7 @@ void UpdateGameplayScreen(void)
     case RUNNING:
     {
         UpdateBackgroundSound();
-        UpdateShip(&gameobjects[0]);
+        UpdateShip(parts.ship);
         UpdateParticles(&particleSystem, game.dt);
         UpdateSaucer();
         UpdateGameObjects();
@@ -995,10 +1074,10 @@ void DrawGameplayScreen(void)
     Vector2 pos = { 20, smallFont.baseSize + 1.2f * gameScale };
 
     for (int i = 0; i < game.lives; ++i) {
-        Vector2 start = Vector2Add(Vector2Scale(shipData[0], gameScale), pos);
+        Vector2 start = Vector2Add(Vector2Scale(shipVertices[0], gameScale), pos);
         for (int v = 1; v < shipVertexCount; ++v)
         {
-            Vector2 end = Vector2Add(Vector2Scale(shipData[v], gameScale), pos);
+            Vector2 end = Vector2Add(Vector2Scale(shipVertices[v], gameScale), pos);
             DrawLineV(start, end, RAYWHITE);
             start = end;
         }
@@ -1013,8 +1092,8 @@ void DrawGameplayScreen(void)
     }
 
     pos.x += 10;
-    for (int i = 0; i < MAX_GAME_OBJECTS; ++i) {
-        Object* obj = &gameobjects[i];
+    Object* obj = &gameobjects[0];
+    for (int i = 0; i < MAX_GAME_OBJECTS; ++i, ++obj) {
         if (!obj->active) continue;
         DrawLineStrip(obj->vertices, obj->vertexCount, RAYWHITE);
     }
@@ -1024,7 +1103,7 @@ void DrawGameplayScreen(void)
     switch (game.state) {
     case LEVEL_START:
     {
-        DrawTextLineCentered(largeFont, "PLAYER 1", GetScreenHeight() / 2.0f, 1.0);
+        DrawTextLineCentered(largeFont, "START", GetScreenHeight() / 3.0f, 1.0);
         break;
     }
     case HYPERSPACE: 

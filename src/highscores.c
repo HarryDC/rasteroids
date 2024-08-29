@@ -72,15 +72,14 @@ void AddHighscore(Highscore scores[], int maxScores, int at, char* name, int sco
 
 void WriteHigscores(const char* fileName, Highscore scores[], int maxScores)
 {
-    const char* comma = ",";
-
     char buffer[1024] = { 0 };
+    int position = 0;
     for (int i = 0; i < maxScores; ++i) {
-        strcat(buffer, scores[i].name);
-        strcat(buffer, comma);
-        strcat(buffer, scores[i].score);
+        TextAppend(buffer, scores[i].name, &position);
+        TextAppend(buffer, ",", &position);
+        TextAppend(buffer, scores[i].score, &position);
         if (i < maxScores - 1) {
-            strcat(buffer, comma);
+            TextAppend(buffer, ",", &position);
         }
     }
     SaveFileText(fileName, buffer);

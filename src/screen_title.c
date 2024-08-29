@@ -60,11 +60,12 @@ void UpdateTitleScreen(void)
     // TODO: Update TITLE screen variables here!
 
     // Press enter or tap to change to GAMEPLAY screen
-    if (IsKeyPressed(KEY_ENTER) || IsGestureDetected(GESTURE_TAP))
+    if (GetKeyPressed() != 0 || IsGestureDetected(GESTURE_TAP) || GetGamepadButtonPressed() != 0)
     {
         //finishScreen = 1;   // OPTIONS
         finishScreen = 2;   // GAMEPLAY
     }
+
 }
 
 // Title Screen Draw logic
