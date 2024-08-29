@@ -6,7 +6,7 @@
 
 static void SetDefaultScores(Highscore scores[], int maxScores)
 {
-    int high = 8000;
+    int high = 15000;
     for (int i = 0; i < maxScores; ++i) {
         
         TextCopy(scores[i].name, "HAS");

@@ -38,21 +38,25 @@ Screen Res: 1024x768
 
 Object	Length (in player ship lengths)
 ---------------------------------------
-Screen              25 x 36
+Screen              25 x 36 (40x20 px on a 1024/768 Screen)
 Large Asteroids	    2.4
 Medium Asteroid	    1.2
 Small Asteroid	    0.6
 Alien Ship (large)  1.5
 Alien Ship (small)  0.75
 
+The approximate speeds of objects in Asteroids
+Object	                    Speed (in ship lengths per second)
+Your ship	                0 - 17
+Asteroids	                4 - 6.5
+Alien ships (both sizes)	4 - 6.5 (depending on your score)
+Bullets	                    17 (ship at rest)
 */
 
-// TODO Fix Asteroid speeds (smaller faster)
 // TODO Use non bold font for large text
 // TODO Level Progression
 // TODO Small Saucer brain, have it avoid asteroids
 // TODO Speed up background pulse with level progression
-// TODO scale velocity over dt
 // TODO Add pause
 // TODO Fullscreen mode (16:10 Aspect Ratio check ...) 
 // TODO Add Instructions
@@ -119,7 +123,9 @@ static float shipAccelrationFactor = .2f;
 static float shipDecelrationFactor = .995f;
 static float shipMaxSpeed = 14.0f;
 static float shipSpeedCutoff = 0.05f;
-static float gameScale = 28;
+// Ship is supposed to be 40 px on a fixed 1024 screen
+// Model is 1 unit long => GameScale = 40
+static float gameScale = 40;
 
 static Vector2 shipDebrisVertices[2] = {
     {0, 0.25f},
@@ -177,7 +183,8 @@ typedef struct Asteroid {
 #define MAX_ASTEROIDS 100
 static Asteroid asteroids[MAX_ASTEROIDS] = { 0 };
 
-static Vector2 asteroidDataLarge[11] = {
+// Large Asteroid 2.4 x 2.4
+static Vector2 asteroidVerticesLarge[11] = {
     {-0.5f, 1.2f},
     {-1.2f, 0.6f},
     {-1.2f, -0.9f},
@@ -191,10 +198,26 @@ static Vector2 asteroidDataLarge[11] = {
     {-0.5f, 1.2f}
 };
 
-static Vector2 asteroidDataMedium[11] = { 0 };
-static Vector2 asteroidDataSmall[11] = { 0 };
+static Vector2 asteroidVerticesMedium[11] = { 0 };
+static Vector2 asteroidVerticesSmall[11] = { 0 };
  
 static int asteroidVertexCount = 11;
+
+enum {
+    ASTEROID_SIZE_LARGE,
+    ASTEROID_SIZE_MEDIUM,
+    ASTEROID_SIZE_SMALL,
+    ASTEROID_SIZE_NUM
+};
+
+static Vector2* asteroidData[ASTEROID_SIZE_NUM] = {
+    asteroidVerticesLarge,
+    asteroidVerticesMedium,
+    asteroidVerticesSmall,
+};
+
+static float asteroidVelocity[ASTEROID_SIZE_NUM] = { 4, 5, 6 };
+static float asteroidRadius[ASTEROID_SIZE_NUM] = { 1.2f, 0.6f, 0.3f};
 
 //----------------------------------------------------------------------------------
 // Saucer Definition
@@ -336,6 +359,7 @@ Object* StackPop(Stack* stack) {
 void StackInit(Stack *stack, Object objects[]) {
     stack->size = MAX_GAME_OBJECTS;
     for (int i = stack->size-1; i >= 0; --i) {
+        objects[i] = (Object){ 0 };
         StackPush(stack, &objects[i]);
     }
 }
@@ -355,8 +379,11 @@ void ObjectInit(Object* obj, Vector2* initialVertices, int vertexCount)
     free(obj->vertices);
     *obj = (Object){ 0 };
     obj->initialVertices = initialVertices;
+    if (obj->vertices == NULL || vertexCount > obj->vertexCount) {
+        free(obj->vertices);
+        obj->vertices = (Vector2*)RL_CALLOC(vertexCount, sizeof(Vector2));
+    }
     obj->vertexCount = vertexCount;
-    obj->vertices = (Vector2*)RL_CALLOC(vertexCount, sizeof(Vector2));
 }
 
 void SetState(int state) {
@@ -390,6 +417,13 @@ Vector2 GetRandomEdgePosition() {
         TraceLog(LOG_WARNING, "Sector switch received invalid sector");
         return Vector2Zero();
     }
+}
+
+// Produces a random angle amount from -degrees/2 to degrees/2 returns radians
+// Use to perturb an angle by this random amount
+inline static float GetRandomAngleRad(int degrees)
+{
+    return (float)GetRandomValue(-degrees/2, degrees/2) * PI / 180.0f;
 }
 
 //----------------------------------------------------------------------------------
@@ -480,7 +514,7 @@ bool CheckCollisionAsteroids(Vector2 pos, float radius) {
     for (int i = MAX_ASTEROIDS - 1; i >= 0; --i) {
         Asteroid* asteroid = &asteroids[i];
         if (asteroid->object == NULL ) continue;
-        if (CheckCollisionCircles(pos, radius * gameScale, asteroid->object->position, 0.3f * asteroid->size * gameScale)) {
+        if (CheckCollisionCircles(pos, radius * gameScale, asteroid->object->position, asteroidRadius[asteroid->size] * gameScale)) {
             return true;
         }
     }
@@ -652,7 +686,7 @@ void AddAsteroid() {
     Object* obj = StackPop(&stack);
 
     asteroids[asteroidId].object = obj;
-    asteroids[asteroidId].size = ASTEROID_LARGE; // Sizes 1,2,4
+    asteroids[asteroidId].size = ASTEROID_SIZE_LARGE; // Sizes 1,2,4
 
     obj->active = true;
     if (obj->vertexCount < asteroidVertexCount || obj->vertices == 0) {
@@ -660,21 +694,22 @@ void AddAsteroid() {
         obj->vertices = (Vector2*)RL_CALLOC(asteroidVertexCount, sizeof(Vector2));
     }
     obj->vertexCount = asteroidVertexCount;
-    obj->initialVertices = asteroidDataLarge;
+    obj->initialVertices = asteroidVerticesLarge;
     obj->position = GetRandomEdgePosition();
 
     float rot = (float)GetRandomValue(0, 359) * PI / 180.0f;
-    float vel = 4.0f;
+    float vel = asteroidVelocity[ASTEROID_SIZE_LARGE];
     obj->velocity = Vector2Scale(Vector2Rotate(yUp, rot), vel);
-    obj->rotVel = (float)GetRandomValue(-100, 100) / 1000.0f;
+    obj->rotVel = (float)GetRandomValue(-100, 100) / 200.0f;
 }
 
 void BreakAsteroid(Asteroid* asteroid) {
+    static int sizeToType[3] = { ASTEROID_LARGE, ASTEROID_MEDIUM, ASTEROID_SMALL };
+    AddScore(sizeToType[asteroid->size]);
 
-    AddScore(asteroid->size);
     SpawnExplosion(&particleSystem, asteroid->object->position, 5);
 
-    if (asteroid->size == ASTEROID_SMALL) {
+    if (asteroid->size == ASTEROID_SIZE_SMALL) {
         asteroid->object->active = false;
         StackPush(&stack, asteroid->object);
         *asteroid = (Asteroid){ .object = NULL, .size = -1 };
@@ -683,26 +718,19 @@ void BreakAsteroid(Asteroid* asteroid) {
         return;
     }
 
-    int newSize;
-    Vector2* initialVertexData;
-    if (asteroid->size == 4) {
-        newSize = 2;
-        initialVertexData = asteroidDataMedium;
-        PlaySound(sounds[SOUND_BANG_LARGE]);
-    }
-    else {
-        newSize = 1;
-        initialVertexData = asteroidDataSmall;
-        PlaySound(sounds[SOUND_BANG_MEDIUM]);
+    int sound = (asteroid->size == ASTEROID_SIZE_LARGE) ? SOUND_BANG_LARGE : SOUND_BANG_MEDIUM;
+    PlaySound(sounds[sound]);
 
-    }
-
+    asteroid->size += 1;
     Object* obj = asteroid->object;
+    
     // Reuse the Original GameObject and add a new one
     // Vertex Count stays the same
-    obj->initialVertices = initialVertexData;
-    obj->velocity = Vector2Rotate(obj->velocity, PI / 2.0f);
-    obj->rotVel = (float)GetRandomValue(-100, 100) / 1000.0f;
+    obj->initialVertices = asteroidData[asteroid->size];
+    Vector2 oldVelocity = obj->velocity;
+    Vector2 newVelocity = Vector2Rotate(obj->velocity, PI / 2.0f + GetRandomAngleRad(40));
+    obj->velocity = Vector2Scale(Vector2Normalize(newVelocity), asteroidVelocity[asteroid->size]);
+    obj->rotVel = (float)GetRandomValue(-100, 100) / 200.0f;
 
     // Spawn a new asteroid
     int newAsteroid = -1;
@@ -720,18 +748,14 @@ void BreakAsteroid(Asteroid* asteroid) {
 
 
     Object* newObj = StackPop(&stack);
-    asteroids[newAsteroid] = (Asteroid){ .object= newObj, .size = newSize };
-
+    asteroids[newAsteroid] = (Asteroid){ .object= newObj, .size = asteroid->size };
+    ObjectInit(newObj, asteroidData[asteroid->size], asteroidVertexCount);
     newObj->active = true;
-    if (newObj->vertexCount < asteroidVertexCount || newObj->vertexCount == 0) {
-        free(newObj->vertices);
-        newObj->vertices = (Vector2*)RL_CALLOC(asteroidVertexCount, sizeof(Vector2));
-    }
-    newObj->vertexCount = asteroidVertexCount;
-    newObj->initialVertices = initialVertexData;
+
     newObj->position = obj->position;
-    newObj->velocity = Vector2Negate(obj->velocity);
-    newObj->rotVel = (float)GetRandomValue(-100, 100) / 1000.0f;
+    newVelocity = Vector2Rotate(oldVelocity, -(PI / 2.0f) + GetRandomAngleRad(40));
+    newObj->velocity = Vector2Scale(Vector2Normalize(newVelocity), asteroidVelocity[asteroid->size]);
+    newObj->rotVel = (float)GetRandomValue(-100, 100) / 200.0f;
 }
 
 void ResetAsteroids() {
@@ -740,6 +764,15 @@ void ResetAsteroids() {
             asteroids[i].object->active = false;
             StackPush(&stack, asteroids[i].object);
             asteroids[i] = (Asteroid){ .object = NULL, .size = -1 };
+        }
+    }
+}
+
+void DrawAsteroidCollisions() {
+    for (int i = 0; i < MAX_ASTEROIDS; ++i) {
+        if (asteroids[i].object != NULL) {
+            Object* obj = asteroids[i].object;
+            DrawCircleLines((int)obj->position.x, (int)obj->position.y, asteroidRadius[asteroids[i].size] * gameScale, DARKGREEN);
         }
     }
 }
@@ -863,7 +896,7 @@ bool CheckCollisions() {
         Object* aObj = asteroid->object;
 
         // Check Collision of Asteroid w/ ship
-        if (CheckCollisionCircles(ship->position, 0.5f * gameScale, aObj->position, 0.3f * asteroid->size * gameScale)) {
+        if (CheckCollisionCircles(ship->position, 0.5f * gameScale, aObj->position, asteroidRadius[asteroid->size] * gameScale)) {
             TraceLog(LOG_INFO, "Ship hit by asteroid %d", i);
             BreakAsteroid(asteroid);
             BreakShip(ship, parts.debris, 3);
@@ -875,7 +908,7 @@ bool CheckCollisions() {
         for (int j = 0; j < MAX_BULLETS; ++j) {
             Object* bObj = bullets[j].object;
             if (!bObj->active) continue;
-            if (CheckCollisionPointCircle(bObj->position, aObj->position, 0.3f * asteroid->size * gameScale)) {
+            if (CheckCollisionPointCircle(bObj->position, aObj->position, asteroidRadius[asteroid->size] * gameScale)) {
                 TraceLog(LOG_INFO, "Asteroid hit by bullet");
                 BreakAsteroid(asteroid);
                 bullets[j].lifetime = -1;
@@ -912,7 +945,7 @@ void UpdateGameObjects() {
     for (int i = 0; i < MAX_GAME_OBJECTS; ++i, ++obj) {
         if (!obj->active) continue;
 
-        obj->position = Vector2Add(obj->position, obj->velocity);
+        obj->position = Vector2Add(obj->position, Vector2Scale(obj->velocity, gameScale * game.dt));
         obj->position.x = Wrap(obj->position.x, 0, (float)GetScreenWidth());
         obj->position.y = Wrap(obj->position.y, 0, (float)GetScreenHeight());
 
@@ -935,7 +968,7 @@ void UpdateBackgroundSound() {
 }
 
 //----------------------------------------------------------------------------------
-// Main Gameplay Functions (called by rayling_game.c
+// Main Gameplay Functions
 //----------------------------------------------------------------------------------
 
 void InitGameplayScreen(void)
@@ -984,11 +1017,10 @@ void InitGameplayScreen(void)
     }
 
     for (int i = 0; i < asteroidVertexCount; ++i) {
-        asteroidDataMedium[i] = Vector2Scale(asteroidDataLarge[i], .5);
-        asteroidDataSmall[i] = Vector2Scale(asteroidDataLarge[i], .25);
+        asteroidVerticesMedium[i] = Vector2Scale(asteroidVerticesLarge[i], .5);
+        asteroidVerticesSmall[i] = Vector2Scale(asteroidVerticesLarge[i], .25);
     }
 
-    // TODO: Initialize GAMEPLAY screen variables here!
     framesCounter = 0;
     finishScreen = 0;
 
@@ -1068,7 +1100,7 @@ void UpdateGameplayScreen(void)
 void DrawGameplayScreen(void)
 {
     DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(), BLACK);
-
+    
     DrawTextEx(smallFont, TextFormat("%i", game.score), (Vector2) { 20, 20 }, (float)smallFont.baseSize, 1.0f,RAYWHITE);
 
     Vector2 pos = { 20, smallFont.baseSize + 1.2f * gameScale };
@@ -1112,6 +1144,10 @@ void DrawGameplayScreen(void)
         break;
     }
     }
+
+#ifdef DEBUGDRAW
+    DrawAsteroidCollisions();
+#endif
 }
 
 // Gameplay Screen Unload logic
