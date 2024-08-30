@@ -54,7 +54,6 @@ Bullets	                    17 (ship at rest)
 */
 
 // TODO Small Saucer brain, have it avoid asteroids
-// TODO Speed up background pulse with level progression
 // TODO Add pause
 // TODO Fullscreen mode (16:10 Aspect Ratio check ...) 
 // TODO Add Instructions
@@ -158,7 +157,9 @@ static Vector2 bulletVertices[5] = {
 static const int bulletVertexCount = 5;
 
 
-#define MAX_BULLETS 5
+#define SAUCER_MAX_BULLETS 5
+#define SHIP_MAX_BULLETS 5
+#define MAX_BULLETS SAUCER_MAX_BULLETS + SHIP_MAX_BULLETS
 typedef struct Bullet {
     Object* object;
     float lifetime;
@@ -219,7 +220,7 @@ static float asteroidRadius[ASTEROID_SIZE_NUM] = { 1.2f, 0.6f, 0.3f};
 
 static int maxLevelAsteroids = 8;
 static int startingAsteroids = 2;
-static int levelSpeedIncrease = 0.1;
+static float levelSpeedIncrease = 0.1;
 
 //----------------------------------------------------------------------------------
 // Saucer Definition
@@ -248,11 +249,11 @@ typedef struct Saucer {
     int type;
     int maxBullets;
     float shotFreq;
-    float shotElapsed; // time since last shot
-    float noSaucerElapsed;
+    float toShootTime; // time since last shot
+    float toNextActionTime;
 } Saucer;
 
-static float saucerSpawnFrequency = 100.0f;
+static float saucerSpawnFrequency = 5.0f;
 static float saucerSpawnChance = 0.1f;
 
 Saucer saucer;
@@ -290,6 +291,9 @@ enum Enemies {
     SAUCER_SMALL = 6,
     MAX_TYPES = 7
 };
+
+static int asteroidSizeToType[3] = { ASTEROID_LARGE, ASTEROID_MEDIUM, ASTEROID_SMALL };
+
 
 typedef struct Game {
     int score;
@@ -390,6 +394,7 @@ void ObjectInit(Object* obj, Vector2* initialVertices, int vertexCount)
     obj->vertexCount = vertexCount;
 }
 
+
 void SetState(int state) {
     game.state = state;
     game.stateTime = 0;
@@ -484,6 +489,40 @@ void SpawnExplosion(ParticleSystem* system, Vector2 pos, int count) {
         }
     }
 }
+
+
+//----------------------------------------------------------------------------------
+// Bullet Functions
+//----------------------------------------------------------------------------------
+
+// Create a bullet from the given range [low, high)
+void SpawnBullet(int low, int high, Vector2 pos, Vector2 vel) {
+    for (int i = low; i < high; ++i)
+    {
+        if (bullets[i].lifetime < 0) {
+            bullets[i].lifetime = bulletInitialLifetime;
+            Object* obj = bullets[i].object;
+            obj->active = true;
+            obj->position = pos;
+            obj->velocity = vel;
+            return;
+        }
+    }
+
+    TraceLog(LOG_WARNING, "Out of bullets in [%i, %i)", low, high);
+}
+
+void UpdateBullets() {
+    for (int i = 0; i < MAX_BULLETS; ++i) {
+        bullets[i].lifetime = Clamp(bullets[i].lifetime - game.dt, -1.0f, 999.0f);
+
+        if (bullets[i].lifetime <= 0.0) {
+            Object* obj = bullets[i].object;
+            obj->active = false;
+        }
+    }
+}
+
 
 //----------------------------------------------------------------------------------
 // Ship Functions
@@ -603,28 +642,10 @@ void UpdateShip(Object* ship) {
         ship->velocity = Vector2ClampValue(ship->velocity, -shipMaxSpeed, shipMaxSpeed);
     }
 
-    // Spawn Bullets and shoot
-    bool doShoot = (input & INPUT_SHOOT) != 0;
-
-    for (int i = 0; i < MAX_BULLETS; ++i) {
-        bullets[i].lifetime = Clamp(bullets[i].lifetime - game.dt, -1.0f, 999.0f);
-
-        if (bullets[i].lifetime <= 0.0) {
-            Object* obj = bullets[i].object;
-            obj->active = false;
-            if (doShoot)
-            {
-                PlaySound(sounds[SOUND_FIRE]);
-                bullets[i].lifetime = bulletInitialLifetime;
-                obj->active = true;
-                obj->position = ship->position;
-                obj->velocity = Vector2Scale(fwd, bulletInitialVelocity);
-                doShoot = false;
-            }
-        }
+    if ((input & INPUT_SHOOT) != 0) {
+        SpawnBullet(0, SHIP_MAX_BULLETS, ship->position, Vector2Scale(fwd, bulletInitialVelocity));
     }
 
-    // TODO Draw Engine graphics when firing
 }
 
 void BreakShip(Object* ship, Object* debris[], int debrisCount) {
@@ -637,32 +658,6 @@ void BreakShip(Object* ship, Object* debris[], int debrisCount) {
         obj->rot = (float)GetRandomValue(0, 360);
         obj->rotVel = (float)GetRandomValue(0, 200) / 100.0f;
     }
-}
-
-//----------------------------------------------------------------------------------
-// Bullet Functions
-//----------------------------------------------------------------------------------
-
-void SpawnBullet(Vector2 pos, Vector2 vel) {
-    int id = -1;
-    for (int i = 0; i < MAX_BULLETS; ++i)
-    {
-        if (bullets[i].lifetime < 0) {
-            id = i;
-            break;
-        }
-    }
-
-    if (id == -1) {
-        TraceLog(LOG_WARNING, "Out of bullets");
-        return;
-    }
-
-    bullets[id].lifetime = bulletInitialLifetime;
-    Object* obj = bullets[id].object;
-    obj->active = true;
-    obj->position = pos;
-    obj->velocity = vel;
 }
 
 
@@ -708,9 +703,6 @@ void AddAsteroid() {
 }
 
 void BreakAsteroid(Asteroid* asteroid) {
-    static int sizeToType[3] = { ASTEROID_LARGE, ASTEROID_MEDIUM, ASTEROID_SMALL };
-    AddScore(sizeToType[asteroid->size]);
-
     SpawnExplosion(&particleSystem, asteroid->object->position, 5);
 
     if (asteroid->size == ASTEROID_SIZE_SMALL) {
@@ -828,18 +820,19 @@ Vector2 shoot_at(Vector2 const shooter, Vector2 const interception, float bullet
     return Vector2Scale(v, scale);
 }
 
-void LargeSaucerShoot() {
-    int count = 0;
-    for (int i = 0; i < MAX_ASTEROIDS; ++i) {
-        if (asteroids[i].object != NULL) {
-            ++count;
-        }
-    }
+void BreakSaucer() {
+    saucer.object->active = false;
+    AddScore(saucer.type);
+    saucer.toNextActionTime = saucerSpawnFrequency;
+    SpawnExplosion(&particleSystem, saucer.object->position, 8);
+    PlaySound(sounds[SOUND_BANG_MEDIUM]);
+}
+
+Object* LargeSaucerSelectTarget() {
+    int count = CountAsteroids();
 
     count = GetRandomValue(0, count - 1);
-
     Object* target = NULL;
-    int num = GetRandomValue(0, count - 1);
     for (int i = 0; i < MAX_ASTEROIDS; ++i) {
         if (asteroids[i].object != NULL) {
             if (count == 0) {
@@ -849,48 +842,83 @@ void LargeSaucerShoot() {
             --count;
         }
     }
+
     if (target == NULL) {
         TraceLog(LOG_ERROR, "Could not find target for saucer");
-        return;
+        return NULL;
     }
+    return target;
+}
 
-    Object* shooter = saucer.object;
-    Vector2 p = intercept(shooter->position, bulletInitialVelocity, target->position, target->velocity);
-    Vector2 bulletVel = shoot_at(shooter->position, p, bulletInitialVelocity);
+Object* SmallSaucerSelectTarget() {
+    if (GetRandomValue(0, 100) > 10) {
+        return parts.ship;
+    }
+    else {
+        return LargeSaucerSelectTarget();
+    }
+}
 
-    SpawnBullet(shooter->position, bulletVel);
+void ShootSaucer(Object* shooter, Object* target, float bulletVelocity) {
+    Vector2 p = intercept(shooter->position, bulletVelocity, target->position, target->velocity);
+    Vector2 bulletVel = shoot_at(shooter->position, p, bulletVelocity);
+
+    SpawnBullet(SHIP_MAX_BULLETS, MAX_BULLETS, shooter->position, bulletVel);
     PlaySound(sounds[SOUND_FIRE]);
+}
+
+void LargeSaucerUpdate() {
+    if (saucer.toNextActionTime > 3.0 && GetRandomValue(0, 10) > 2) {
+        float angle = GetRandomAngleRad(90.0f);
+        saucer.object->velocity = Vector2Rotate(saucer.object->velocity, PI / 2.0f + GetRandomAngleRad(40));
+    }
+}
+
+void SmallSaucerUpdate() {
+    if (saucer.toNextActionTime > 3.0 && GetRandomValue(0, 10) > 2) {
+        float angle = GetRandomAngleRad(90.0f);
+        saucer.object->velocity = Vector2Rotate(saucer.object->velocity, PI / 2.0f + GetRandomAngleRad(40));
+    }
 }
 
 void UpdateSaucer() {
     static int soundIds[2] = { SOUND_SAUCER_BIG, SOUND_SAUCER_SMALL };
-    typedef void (*ShootFunc)();
-    static ShootFunc shootFunc[2] = { LargeSaucerShoot, LargeSaucerShoot };
+    typedef Object* (*ShootFunc)();
+    static ShootFunc targetFunc[2] = { LargeSaucerSelectTarget, SmallSaucerSelectTarget};
+    
+    typedef void (*UpdateFunc)();
+    static UpdateFunc updateFunc[2] = { LargeSaucerUpdate, SmallSaucerUpdate };
+
+    saucer.toNextActionTime -= game.dt;
 
     Object* obj = saucer.object;
     if (obj->active) {
         if (!IsSoundPlaying(sounds[soundIds[saucer.type]])) {
             PlaySound(sounds[soundIds[saucer.type]]);
         }
-        saucer.shotElapsed += game.dt;
-        if (saucer.shotElapsed > saucer.shotFreq) {
-            shootFunc[saucer.type]();
-            saucer.shotElapsed = 0;
+        updateFunc[saucer.type]();
+
+        saucer.toShootTime -= game.dt;
+        if (saucer.toShootTime < 0) {
+            Object* target = targetFunc[saucer.type]();
+            ShootSaucer(saucer.object, target, bulletInitialVelocity);
+            saucer.toShootTime = saucer.shotFreq;
         }
+
     }
     else {
-        saucer.noSaucerElapsed += game.dt;
-        if (saucer.noSaucerElapsed < saucerSpawnFrequency) return;
+        if (saucer.toNextActionTime > 0) return;
 
         float ran = GetRandomValue(0, 100) / 100.0f;
         if (ran < saucerSpawnChance) {
-            saucer.noSaucerElapsed = 0;
+            saucer.toNextActionTime = 0;
             if (game.score < 100000 || GetRandomValue(0,10) < 3) {
                 SpawnSaucer(SAUCER_LARGE);
             }
             else {
                 SpawnSaucer(SAUCER_SMALL);
             }
+            saucer.toShootTime = saucer.shotFreq;
         }
     }
 }
@@ -914,10 +942,21 @@ bool CheckCollisions() {
         // Check Collision of Asteroid w/ ship
         if (CheckCollisionCircles(ship->position, 0.5f * gameScale, aObj->position, asteroidRadius[asteroid->size] * gameScale)) {
             TraceLog(LOG_INFO, "Ship hit by asteroid %d", i);
+            AddScore(asteroidSizeToType[asteroid->size]);
             BreakAsteroid(asteroid);
             BreakShip(ship, parts.debris, 3);
             game.lives -= 1;
             return true;
+        }
+
+        // Check collision of Asteroid w/ saucer
+        if (saucerObj->active && 
+            CheckCollisionCircles(saucerObj->position, 0.7f * gameScale, aObj->position, asteroidRadius[asteroid->size] * gameScale)) {
+                TraceLog(LOG_INFO, "Asteroid hit saucer");
+                BreakSaucer(saucer.object);
+                AddScore(asteroidSizeToType[asteroid->size]);
+                BreakAsteroid(asteroid);
+                continue;
         }
 
         // Check Collision of Asteroid w/ ship bullets
@@ -926,9 +965,11 @@ bool CheckCollisions() {
             if (!bObj->active) continue;
             if (CheckCollisionPointCircle(bObj->position, aObj->position, asteroidRadius[asteroid->size] * gameScale)) {
                 TraceLog(LOG_INFO, "Asteroid hit by bullet");
+                AddScore(asteroidSizeToType[asteroid->size]);
                 BreakAsteroid(asteroid);
                 bullets[j].lifetime = -1;
                 bObj->active = false;
+                break;
             }
         }
     }
@@ -940,8 +981,18 @@ bool CheckCollisions() {
             game.lives -= 1;
             return true;
         }
+        // Check Collision of Ship w/ ship bullets
+        for (int j = 0; j < SHIP_MAX_BULLETS; ++j) {
+            Object* bObj = bullets[j].object;
+            if (!bObj->active) continue;
+            if (CheckCollisionPointCircle(bObj->position, saucerObj->position, 0.7f * gameScale)) {
+                TraceLog(LOG_INFO, "Saucer hit by bullet");
+                BreakSaucer(saucer.object);
+                bullets[j].lifetime = -1;
+                bObj->active = false;
+            }
+        }
     }
-
     return false;
 }
 
@@ -964,8 +1015,8 @@ void UpdateGameObjects() {
 }
 
 void UpdateBackgroundSound() {
-    float val = (11.0 - Clamp((float)CountAsteroids(), 1, 10)) * 0.1f;
-    sound.interval = 0.25 + 1.25 * val;
+    float val = (11.0f - Clamp((float)CountAsteroids(), 1, 10)) * 0.1f;
+    sound.interval = 0.25f + 1.25f * val;
     sound.elapsed += game.dt;
     if (sound.elapsed > sound.interval) {
         sound.elapsed = 0;
@@ -1039,7 +1090,7 @@ void InitGameplayScreen(void)
     }
 
     //Saucer
-    saucer = (Saucer){ .object = 0, .maxBullets = 2, .shotElapsed = 0, .shotFreq = 1.5f, .type = 0, .noSaucerElapsed = 0 };
+    saucer = (Saucer){ .object = 0, .maxBullets = 2, .toShootTime = 0, .shotFreq = 1.5f, .type = 0, .toNextActionTime = saucerSpawnFrequency };
     saucer.object = StackPop(&stack);
     saucer.object->active = false;
     saucer.object->vertexCount = saucerVertexCount;
@@ -1084,12 +1135,6 @@ void UpdateGameplayScreen(void)
         nextHyperspace += nextHyperSpaceInverval;
     }
 
-    // Press enter or tap to change to ENDING screen
-    if (IsKeyPressed(KEY_ENTER) || IsGestureDetected(GESTURE_TAP))
-    {
-        finishScreen = 1;
-    }
-
     switch (game.state) {
     case LEVEL_START:
         if (game.stateTime > 3.0) {
@@ -1106,6 +1151,7 @@ void UpdateGameplayScreen(void)
             gameobjects[0].active = true;
         }
         UpdateSaucer();
+        UpdateBullets();
         UpdateParticles(&particleSystem, game.dt);
         UpdateGameObjects();
         break;
@@ -1116,6 +1162,7 @@ void UpdateGameplayScreen(void)
         UpdateShip(parts.ship);
         UpdateParticles(&particleSystem, game.dt);
         UpdateSaucer();
+        UpdateBullets();
         UpdateGameObjects();
         if (CheckCollisions()) {
             SetState(DYING);
@@ -1128,6 +1175,7 @@ void UpdateGameplayScreen(void)
     case LEVEL_DONE:
         UpdateShip(parts.ship);
         UpdateParticles(&particleSystem, game.dt);
+        UpdateBullets();
         if (game.stateTime > 2.0f) {
             NextLevel();
             SetState(RUNNING);
