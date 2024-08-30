@@ -53,7 +53,6 @@ Alien ships (both sizes)	4 - 6.5 (depending on your score)
 Bullets	                    17 (ship at rest)
 */
 
-// TODO Level Progression
 // TODO Small Saucer brain, have it avoid asteroids
 // TODO Speed up background pulse with level progression
 // TODO Add pause
@@ -218,6 +217,10 @@ static Vector2* asteroidData[ASTEROID_SIZE_NUM] = {
 static float asteroidVelocity[ASTEROID_SIZE_NUM] = { 4, 5, 6 };
 static float asteroidRadius[ASTEROID_SIZE_NUM] = { 1.2f, 0.6f, 0.3f};
 
+static int maxLevelAsteroids = 8;
+static int startingAsteroids = 2;
+static int levelSpeedIncrease = 0.1;
+
 //----------------------------------------------------------------------------------
 // Saucer Definition
 //---------------------------------------------------------------------------------- 
@@ -271,6 +274,7 @@ static int currentInput = 0;
 
 enum GameState {
     LEVEL_START,
+    LEVEL_DONE,
     RUNNING,
     DYING,
     HYPERSPACE,
@@ -291,6 +295,7 @@ typedef struct Game {
     int score;
     int lives;
     int hyperspace;
+    int level;
     int state;
     float dt;
     float stateTime;
@@ -697,7 +702,7 @@ void AddAsteroid() {
     obj->position = GetRandomEdgePosition();
 
     float rot = (float)GetRandomValue(0, 359) * PI / 180.0f;
-    float vel = asteroidVelocity[ASTEROID_SIZE_LARGE];
+    float vel = asteroidVelocity[ASTEROID_SIZE_LARGE] + levelSpeedIncrease * game.level;
     obj->velocity = Vector2Scale(Vector2Rotate(yUp, rot), vel);
     obj->rotVel = (float)GetRandomValue(-100, 100) / 200.0f;
 }
@@ -728,7 +733,8 @@ void BreakAsteroid(Asteroid* asteroid) {
     obj->initialVertices = asteroidData[asteroid->size];
     Vector2 oldVelocity = obj->velocity;
     Vector2 newVelocity = Vector2Rotate(obj->velocity, PI / 2.0f + GetRandomAngleRad(40));
-    obj->velocity = Vector2Scale(Vector2Normalize(newVelocity), asteroidVelocity[asteroid->size]);
+    float newSpeed = asteroidVelocity[asteroid->size] + levelSpeedIncrease * game.level;
+    obj->velocity = Vector2Scale(Vector2Normalize(newVelocity), newSpeed);
     obj->rotVel = (float)GetRandomValue(-100, 100) / 200.0f;
 
     // Spawn a new asteroid
@@ -753,7 +759,8 @@ void BreakAsteroid(Asteroid* asteroid) {
 
     newObj->position = obj->position;
     newVelocity = Vector2Rotate(oldVelocity, -(PI / 2.0f) + GetRandomAngleRad(40));
-    newObj->velocity = Vector2Scale(Vector2Normalize(newVelocity), asteroidVelocity[asteroid->size]);
+    newSpeed = asteroidVelocity[asteroid->size] + levelSpeedIncrease * game.level;
+    newObj->velocity = Vector2Scale(Vector2Normalize(newVelocity), newSpeed);
     newObj->rotVel = (float)GetRandomValue(-100, 100) / 200.0f;
 }
 
@@ -774,6 +781,16 @@ void DrawAsteroidCollisions() {
             DrawCircleLines((int)obj->position.x, (int)obj->position.y, asteroidRadius[asteroids[i].size] * gameScale, DARKGREEN);
         }
     }
+}
+
+int CountAsteroids() {
+    int count = 0;
+    for (int i = 0; i < MAX_ASTEROIDS; ++i) {
+        if (asteroids[i].object != NULL) {
+            ++count;
+        }
+    }
+    return count;
 }
 
 //----------------------------------------------------------------------------------
@@ -928,17 +945,6 @@ bool CheckCollisions() {
     return false;
 }
 
-void ResetLevel() {
-    ResetShip();
-    gameobjects[0].active = true;
-    ResetBullets();
-    ResetFragments();
-    ResetAsteroids();
-    AddAsteroid();
-    AddAsteroid();
-    SetState(LEVEL_START);
-}
-
 void UpdateGameObjects() {
     Object* obj = &gameobjects[0];
     for (int i = 0; i < MAX_GAME_OBJECTS; ++i, ++obj) {
@@ -958,12 +964,49 @@ void UpdateGameObjects() {
 }
 
 void UpdateBackgroundSound() {
+    float val = (11.0 - Clamp((float)CountAsteroids(), 1, 10)) * 0.1f;
+    sound.interval = 0.25 + 1.25 * val;
     sound.elapsed += game.dt;
     if (sound.elapsed > sound.interval) {
         sound.elapsed = 0;
         PlaySound(sounds[sound.beat]);
         sound.beat = (sound.beat == SOUND_BEAT_1) ? SOUND_BEAT_2 : SOUND_BEAT_1;
     }
+}
+//----------------------------------------------------------------------------------
+// Levels
+//----------------------------------------------------------------------------------
+bool IsLevelDone() {
+    for (int i = 0; i < MAX_ASTEROIDS; ++i) {
+        if (asteroids[i].object != NULL && asteroids[i].object->active == true) {
+            return false;
+        }
+    }
+    if (saucer.object->active) {
+        return false;
+    }
+    return true;
+}
+
+void CreateLevel() {
+    int count = (int)Clamp((float)(startingAsteroids + game.level), (float)startingAsteroids, (float)maxLevelAsteroids);
+    for (int i = 0; i < count; ++i) {
+        AddAsteroid();
+    }
+}
+
+
+void NextLevel() {
+    game.level += 1;
+}
+
+void ResetLevel() {
+    ResetShip();
+    gameobjects[0].active = true;
+    ResetBullets();
+    ResetFragments();
+    ResetAsteroids();
+    SetState(LEVEL_START);
 }
 
 //----------------------------------------------------------------------------------
@@ -975,8 +1018,8 @@ void InitGameplayScreen(void)
     StackInit(&stack, gameobjects);
     InitParticleSystem(&particleSystem);
 
-    game = (Game){ .score = 0, .lives = 3, .hyperspace = 2, .state = LEVEL_START, .stateTime = 0 };
-    sound = (BackgroundSound){ .interval = 1, .elapsed = 0, .beat = SOUND_BEAT_1 };
+    game = (Game){ .score = 0, .lives = 3, .hyperspace = 2, .level = -1, .state = LEVEL_START, .stateTime = 0 };
+    sound = (BackgroundSound){ .interval = 2, .elapsed = 0, .beat = SOUND_BEAT_1 };
 
     // Ship
     parts.ship = StackPop(&stack);
@@ -1051,13 +1094,14 @@ void UpdateGameplayScreen(void)
     case LEVEL_START:
         if (game.stateTime > 3.0) {
             gameobjects[0].active = true;
+            CreateLevel();
             SetState(RUNNING);
         } 
         break;
     case HYPERSPACE:
     {
         UpdateBackgroundSound();
-        if (game.stateTime > .75) {
+        if (game.stateTime > .75f) {
             SetState(RUNNING);
             gameobjects[0].active = true;
         }
@@ -1076,8 +1120,19 @@ void UpdateGameplayScreen(void)
         if (CheckCollisions()) {
             SetState(DYING);
         }
+        else if (IsLevelDone()) {
+            SetState(LEVEL_DONE);
+        }
         break;
     }
+    case LEVEL_DONE:
+        UpdateShip(parts.ship);
+        UpdateParticles(&particleSystem, game.dt);
+        if (game.stateTime > 2.0f) {
+            NextLevel();
+            SetState(RUNNING);
+        }
+        break;
     case DYING:
     {
         UpdateGameObjects();
