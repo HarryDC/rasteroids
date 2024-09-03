@@ -54,7 +54,6 @@ Bullets	                    17 (ship at rest)
 */
 
 // Small Saucer brain, have it avoid asteroids
-// Fix bug with thrust graphics persisting after death
 // Check Highscore page, with highscore, without highscore, check storing of highscore
 // Add pause
 // Fullscreen mode (16:10 Aspect Ratio check ...) 
@@ -171,7 +170,7 @@ typedef struct Bullet {
 
 static Bullet bullets[MAX_BULLETS] = { 0 };
 
-static float bulletInitialLifetime = 1.0f; // seconds
+static float bulletInitialLifetime = 3.0f; // seconds
 static float bulletInitialVelocity = 14.0f;
 
 //----------------------------------------------------------------------------------
@@ -248,6 +247,13 @@ static Vector2 saucerDataLarge[13] = {
 
 static Vector2 saucerDataSmall[13] = { 0 };
 
+enum {
+    SAUCER_SIZE_LARGE,
+    SAUCER_SIZE_SMALL
+};
+
+
+
 typedef struct Saucer {
     Object* object;
     int type;
@@ -259,6 +265,7 @@ typedef struct Saucer {
 
 static float saucerSpawnFrequency = 5.0f;
 static float saucerSpawnChance = 0.1f;
+static float saucerActionTime = 3.0f;
 
 Saucer saucer;
 
@@ -296,8 +303,8 @@ enum Enemies {
     MAX_TYPES = 7
 };
 
-static int asteroidSizeToType[3] = { ASTEROID_LARGE, ASTEROID_MEDIUM, ASTEROID_SMALL };
-
+static int asteroidSizeToObject[3] = { ASTEROID_LARGE, ASTEROID_MEDIUM, ASTEROID_SMALL };
+static int saucerSizeToObject[2] = { SAUCER_LARGE, SAUCER_SMALL };
 
 typedef struct Game {
     int score;
@@ -804,11 +811,14 @@ void ResetSaucer() {
 
 void SpawnSaucer(int type) {
     Object* obj = saucer.object;
+    saucer.type = type;
 
     // Always Spawn on the RIM
     obj->active = true;
-    obj->initialVertices = (type == SAUCER_LARGE) ? saucerDataLarge : saucerDataSmall;
-    obj->velocity = (Vector2){ 1, 1 };
+    obj->initialVertices = (type == SAUCER_SIZE_LARGE) ? saucerDataLarge : saucerDataSmall;
+    float speed = 4 + (float)game.score / 10000.0f;
+    speed = Clamp(speed, 0, 7);
+    obj->velocity = (Vector2Rotate(yUp, GetRandomAngleRad(180)));
     obj->position = GetRandomEdgePosition();
     obj->rot = 0;
     obj->rotVel = 0;
@@ -835,7 +845,7 @@ Vector2 shoot_at(Vector2 const shooter, Vector2 const interception, float bullet
 
 void BreakSaucer() {
     saucer.object->active = false;
-    AddScore(saucer.type);
+    AddScore(saucerSizeToObject[saucer.type]);
     saucer.toNextActionTime = saucerSpawnFrequency;
     SpawnExplosion(&particleSystem, saucer.object->position, 8);
     PlaySound(sounds[SOUND_BANG_MEDIUM]);
@@ -860,7 +870,7 @@ Object* LargeSaucerSelectTarget() {
         TraceLog(LOG_ERROR, "Could not find target for saucer");
         return NULL;
     }
-    return parts.ship;
+    return target;
 }
 
 Object* SmallSaucerSelectTarget() {
@@ -881,21 +891,23 @@ void ShootSaucer(Object* shooter, Object* target, float bulletVelocity) {
 }
 
 void LargeSaucerUpdate() {
-    if (saucer.toNextActionTime > 3.0 && GetRandomValue(0, 10) > 2) {
+    if (saucer.toNextActionTime < 0) {
         float angle = GetRandomAngleRad(90);
         saucer.object->velocity = Vector2Rotate(saucer.object->velocity, PI / 2.0f + GetRandomAngleRad(40));
+        saucer.toNextActionTime = saucerActionTime + (float)GetRandomValue(0, (int)saucerActionTime * 10)/10.0f;
     }
 }
 
 void SmallSaucerUpdate() {
-    if (saucer.toNextActionTime > 3.0 && GetRandomValue(0, 10) > 2) {
+    if (saucer.toNextActionTime < 0) {
         float angle = GetRandomAngleRad(90);
         saucer.object->velocity = Vector2Rotate(saucer.object->velocity, PI / 2.0f + GetRandomAngleRad(40));
+        saucer.toNextActionTime = saucerActionTime + (float)GetRandomValue(0, (int)saucerActionTime * 10)/10.0f;
     }
 }
 
 void UpdateSaucer() {
-    static int soundIds[2] = { SOUND_SAUCER_BIG, SOUND_SAUCER_SMALL };
+    static int soundIds[2] = { SOUND_SAUCER_LARGE, SOUND_SAUCER_SMALL };
     typedef Object* (*ShootFunc)();
     static ShootFunc targetFunc[2] = { LargeSaucerSelectTarget, SmallSaucerSelectTarget};
     
@@ -924,12 +936,12 @@ void UpdateSaucer() {
 
         float ran = GetRandomValue(0, 100) / 100.0f;
         if (ran < saucerSpawnChance) {
-            saucer.toNextActionTime = 0;
+            saucer.toNextActionTime = saucerActionTime;
             if (game.score < 100000 || GetRandomValue(0,10) < 3) {
-                SpawnSaucer(SAUCER_LARGE);
+                SpawnSaucer(SAUCER_SIZE_LARGE);
             }
             else {
-                SpawnSaucer(SAUCER_SMALL);
+                SpawnSaucer(SAUCER_SIZE_SMALL);
             }
             saucer.toShootTime = saucer.shotFreq;
         }
@@ -955,7 +967,7 @@ bool CheckCollisions() {
         // Check Collision of Asteroid w/ ship
         if (CheckCollisionCircles(ship->position, 0.5f * gameScale, aObj->position, asteroidRadius[asteroid->size] * gameScale)) {
             TraceLog(LOG_INFO, "Ship hit by asteroid %d", i);
-            AddScore(asteroidSizeToType[asteroid->size]);
+            AddScore(asteroidSizeToObject[asteroid->size]);
             BreakAsteroid(asteroid);
             BreakShip(&parts);
             game.lives -= 1;
@@ -967,7 +979,7 @@ bool CheckCollisions() {
             CheckCollisionCircles(saucerObj->position, 0.7f * gameScale, aObj->position, asteroidRadius[asteroid->size] * gameScale)) {
                 TraceLog(LOG_INFO, "Asteroid hit saucer");
                 BreakSaucer(saucer.object);
-                AddScore(asteroidSizeToType[asteroid->size]);
+                AddScore(asteroidSizeToObject[asteroid->size]);
                 BreakAsteroid(asteroid);
                 continue;
         }
@@ -978,7 +990,7 @@ bool CheckCollisions() {
             if (!bObj->active) continue;
             if (CheckCollisionPointCircle(bObj->position, aObj->position, asteroidRadius[asteroid->size] * gameScale)) {
                 TraceLog(LOG_INFO, "Asteroid hit by bullet");
-                AddScore(asteroidSizeToType[asteroid->size]);
+                AddScore(asteroidSizeToObject[asteroid->size]);
                 BreakAsteroid(asteroid);
                 bullets[j].lifetime = -1;
                 bObj->active = false;
@@ -1126,6 +1138,10 @@ void InitGameplayScreen(void)
     saucer.object->vertexCount = saucerVertexCount;
     saucer.object->initialVertices = saucerDataLarge;
     saucer.object->vertices = (Vector2*)RL_CALLOC(saucerVertexCount, sizeof(Vector2));
+
+    for (int i = 0; i < saucerVertexCount; ++i) {
+        saucerDataSmall[i] = Vector2Scale(saucerDataLarge[i], 0.6f);
+    }
 
 
     for (int i = 0; i < MAX_BULLETS; ++i) {
