@@ -53,11 +53,13 @@ Alien ships (both sizes)	4 - 6.5 (depending on your score)
 Bullets	                    17 (ship at rest)
 */
 
-// TODO Small Saucer brain, have it avoid asteroids
-// TODO Add pause
-// TODO Fullscreen mode (16:10 Aspect Ratio check ...) 
-// TODO Add Instructions
-// TODO Key and Button Map
+// Small Saucer brain, have it avoid asteroids
+// Fix bug with thrust graphics persisting after death
+// Check Highscore page, with highscore, without highscore, check storing of highscore
+// Add pause
+// Fullscreen mode (16:10 Aspect Ratio check ...) 
+// Add Instructions
+// Key and Button Map
 
 //----------------------------------------------------------------------------------
 // Module Variables Definition (local)
@@ -138,7 +140,9 @@ static int nextHyperspace = 2500;
 typedef struct Ship {
     Object* ship;
     Object* thrust[2];
+    int thrustCount;
     Object* debris[4];
+    int debrisCount;
 } ShipParts;
 
 static ShipParts parts;
@@ -220,7 +224,7 @@ static float asteroidRadius[ASTEROID_SIZE_NUM] = { 1.2f, 0.6f, 0.3f};
 
 static int maxLevelAsteroids = 8;
 static int startingAsteroids = 2;
-static float levelSpeedIncrease = 0.1;
+static float levelSpeedIncrease = 0.1f;
 
 //----------------------------------------------------------------------------------
 // Saucer Definition
@@ -419,9 +423,9 @@ Vector2 GetRandomEdgePosition() {
     case 1:
         return (Vector2){ (float)GetScreenWidth() , (float)GetRandomValue(0, GetScreenHeight()) };
     case 2:
-        return (Vector2) { 0, (float)GetRandomValue(0, GetScreenHeight()) };
+        return (Vector2) { (float)GetRandomValue(0, GetScreenWidth()), 0 };
     case 3:
-        return (Vector2){ (float)GetScreenWidth() ,(float)GetRandomValue(0, GetScreenHeight()) };
+        return (Vector2){ (float)GetRandomValue(0, GetScreenWidth()), (float)GetScreenHeight() };
     default:
         TraceLog(LOG_WARNING, "Sector switch received invalid sector");
         return Vector2Zero();
@@ -548,7 +552,7 @@ void ResetBullets() {
 }
 
 void ResetFragments() {
-    for (int i = 0; i < 4; ++i) {
+    for (int i = 0; i < parts.debrisCount; ++i) {
         parts.debris[i]->active = false;
     }
 }
@@ -619,7 +623,7 @@ void UpdateShip(Object* ship) {
     if ((input & INPUT_THRUST) != 0) {
         ship->velocity = Vector2Add(ship->velocity, accell);
 
-        for (int i = 0; i < 2; ++i) {
+        for (int i = 0; i < parts.thrustCount; ++i) {
             Object* obj = parts.thrust[i];
             obj->active = true;
             obj->position = ship->position;
@@ -629,7 +633,7 @@ void UpdateShip(Object* ship) {
         }
     }
     else {
-        for (int i = 0; i < 2; ++i) {
+        for (int i = 0; i < parts.thrustCount; ++i) {
             parts.thrust[i]->active = false;
         }
     }
@@ -648,15 +652,19 @@ void UpdateShip(Object* ship) {
 
 }
 
-void BreakShip(Object* ship, Object* debris[], int debrisCount) {
-    ship->active = false;
-    for (int i = 0; i < debrisCount; ++i) {
-        Object* obj = debris[i];
+void BreakShip(ShipParts* parts) {
+    PlaySound(sounds[SOUND_BANG_MEDIUM]);
+    parts->ship->active = false;
+    for (int i = 0; i < parts->debrisCount; ++i) {
+        Object* obj = parts->debris[i];
         obj->active = true;
-        obj->position = ship->vertices[i];
-        obj->velocity = Vector2Scale(Vector2Subtract(obj->position, ship->position), 0.01f);
+        obj->position = parts->ship->vertices[i];
+        obj->velocity = Vector2Scale(Vector2Subtract(obj->position, parts->ship->position), 0.01f);
         obj->rot = (float)GetRandomValue(0, 360);
         obj->rotVel = (float)GetRandomValue(0, 200) / 100.0f;
+    }
+    for (int i = 0; i < parts->thrustCount; ++i) {
+        parts->thrust[i]->active = false;
     }
 }
 
@@ -789,6 +797,11 @@ int CountAsteroids() {
 // Saucer Functions
 //----------------------------------------------------------------------------------
 
+void ResetSaucer() {
+    saucer.object->active = false;
+    saucer.toNextActionTime = saucerSpawnFrequency;
+}
+
 void SpawnSaucer(int type) {
     Object* obj = saucer.object;
 
@@ -847,7 +860,7 @@ Object* LargeSaucerSelectTarget() {
         TraceLog(LOG_ERROR, "Could not find target for saucer");
         return NULL;
     }
-    return target;
+    return parts.ship;
 }
 
 Object* SmallSaucerSelectTarget() {
@@ -869,14 +882,14 @@ void ShootSaucer(Object* shooter, Object* target, float bulletVelocity) {
 
 void LargeSaucerUpdate() {
     if (saucer.toNextActionTime > 3.0 && GetRandomValue(0, 10) > 2) {
-        float angle = GetRandomAngleRad(90.0f);
+        float angle = GetRandomAngleRad(90);
         saucer.object->velocity = Vector2Rotate(saucer.object->velocity, PI / 2.0f + GetRandomAngleRad(40));
     }
 }
 
 void SmallSaucerUpdate() {
     if (saucer.toNextActionTime > 3.0 && GetRandomValue(0, 10) > 2) {
-        float angle = GetRandomAngleRad(90.0f);
+        float angle = GetRandomAngleRad(90);
         saucer.object->velocity = Vector2Rotate(saucer.object->velocity, PI / 2.0f + GetRandomAngleRad(40));
     }
 }
@@ -944,7 +957,7 @@ bool CheckCollisions() {
             TraceLog(LOG_INFO, "Ship hit by asteroid %d", i);
             AddScore(asteroidSizeToType[asteroid->size]);
             BreakAsteroid(asteroid);
-            BreakShip(ship, parts.debris, 3);
+            BreakShip(&parts);
             game.lives -= 1;
             return true;
         }
@@ -977,11 +990,11 @@ bool CheckCollisions() {
     if (saucerObj->active) {
         if (CheckCollisionCircles(ship->position, 0.5f * gameScale, saucerObj->position, 0.7f * gameScale)) {
             TraceLog(LOG_INFO, "Ship hit saucer");
-            BreakShip(ship, parts.debris, 3);
+            BreakShip(&parts);
             game.lives -= 1;
             return true;
         }
-        // Check Collision of Ship w/ ship bullets
+        // Check Collision of Saucer w/ ship bullets
         for (int j = 0; j < SHIP_MAX_BULLETS; ++j) {
             Object* bObj = bullets[j].object;
             if (!bObj->active) continue;
@@ -993,6 +1006,20 @@ bool CheckCollisions() {
             }
         }
     }
+
+    // Check Collision of Ship with Saucer bullets
+    for (int j = SHIP_MAX_BULLETS; j < MAX_BULLETS; ++j) {
+        Object* bObj = bullets[j].object;
+        if (!bObj->active) continue;
+        if (CheckCollisionPointCircle(bObj->position, ship->position, 0.5f * gameScale)) {
+            TraceLog(LOG_INFO, "Ship hit by bullet");
+            BreakShip(&parts);
+            bObj->active = false;
+            game.lives -= 1;
+            return true;
+        }
+    }
+
     return false;
 }
 
@@ -1053,6 +1080,7 @@ void NextLevel() {
 
 void ResetLevel() {
     ResetShip();
+    ResetSaucer();
     gameobjects[0].active = true;
     ResetBullets();
     ResetFragments();
@@ -1078,13 +1106,15 @@ void InitGameplayScreen(void)
     ResetShip();
 
     // Ship Debris
-    for (int i = 0; i < 4; ++i) {
+    parts.debrisCount = 3;
+    for (int i = 0; i < parts.debrisCount; ++i) {
         parts.debris[i] = StackPop(&stack);
         ObjectInit(parts.debris[i], shipDebrisVertices, shipDebrisVertexCount);;
     }
 
     // Thust Graphics
-    for (int i = 0; i < 2; ++i) {
+    parts.thrustCount = 2;
+    for (int i = 0; i < parts.thrustCount; ++i) {
         parts.thrust[i] = StackPop(&stack);
         ObjectInit(parts.thrust[i], shipThrustVertices[i], shipThrustVertexCount);
     }
