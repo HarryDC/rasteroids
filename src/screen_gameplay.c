@@ -57,7 +57,6 @@ Bullets	                    17 (ship at rest)
 // Add pause
 // Fullscreen mode (16:10 Aspect Ratio check ...) 
 // Add Instructions
-// Key and Button Map
 
 //----------------------------------------------------------------------------------
 // Module Variables Definition (local)

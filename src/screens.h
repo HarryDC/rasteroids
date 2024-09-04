@@ -136,6 +136,8 @@ void AddHighscore(Highscore scores[], int maxScores, int at, char* name, int sco
 void DrawTextLineCentered(Font font, const char* text, float y, float spacing);
 void DrawHighscores(Font font, float top, float lineSpace, float gap, Highscore* scores, int maxScores);
 
+void LoadControlMap(const char* fileName, int map[], int maxEntries);
+void WriteControlMap(const char* fileName, int map[], int maxEntries);
 
 #ifdef __cplusplus
 }

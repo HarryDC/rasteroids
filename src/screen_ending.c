@@ -52,7 +52,6 @@ static bool currentBlinkState = true;
 // Ending Screen Initialization logic
 void InitEndingScreen(void)
 {
-    LoadHigscores("hight.txt", scores, MAX_HIGHSCORES);
     // TODO: Initialize ENDING screen variables here!
     framesCounter = 0;
     finishScreen = 0;

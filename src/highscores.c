@@ -15,10 +15,34 @@ static void SetDefaultScores(Highscore scores[], int maxScores)
     }
 }
 
+void LoadControlMap(const char* fileName, int map[], int maxEntries) {
+    int size = 0;
+    unsigned char *mapData = LoadFileData(fileName, &size);
+    if (mapData == 0) {
+        TraceLog(LOG_WARNING, "Could not load control map file %s/%s", GetWorkingDirectory(), fileName);
+        return;
+    }
+    if (size == sizeof(int) * maxEntries) {
+        int *dataCast = (int*)mapData;
+        for (int i = 0; i < maxEntries; ++i) {
+            map[i] = dataCast[i];
+        }
+    }
+    else {
+        TraceLog(LOG_WARNING, "Mapfile has different size %i, expected was %i", size, sizeof(int) * maxEntries);
+    }
+
+    UnloadFileData(mapData);
+}
+
+void WriteControlMap(const char* fileName, int map[], int maxEntries) {
+    SaveFileData(fileName, map, sizeof(int) * maxEntries);
+}
+
 void LoadHigscores(const char* fileName, Highscore scores[], int maxScores) {
     char* highscoreText = LoadFileText(fileName);
     if (highscoreText == 0) {
-        TraceLog(LOG_WARNING, "Could not load highscores file %s/%s", GetWorkingDirectory(), "high.txt");
+        TraceLog(LOG_WARNING, "Could not load highscores file %s/%s", GetWorkingDirectory(), fileName);
         SetDefaultScores(scores, maxScores);
         return;
     }

@@ -32,7 +32,7 @@
 static int framesCounter = 0;
 static int finishScreen = 0;
 
-static char* anyKey = "push enter to start\npush <o> for options";
+static char* anyKey = "press <return> to start\npress <o> for options";
 static Vector2 anyKeyPos = { 0 };
 
 //----------------------------------------------------------------------------------
@@ -50,8 +50,6 @@ void InitTitleScreen(void)
     Vector2 anyKeySize = MeasureTextEx(smallFont, anyKey, (float)smallFont.baseSize, 1.0);
     anyKeyPos.x = (GetScreenWidth() - anyKeySize.x) / 2.0f;
     anyKeyPos.y = 600;
-
-    LoadHigscores("hight.txt", scores, MAX_HIGHSCORES);
 }
 
 // Title Screen Update logic

@@ -123,6 +123,9 @@ int main(void)
         sounds[i] = LoadSound(soundFiles[i]);
     }
 
+    LoadHigscores("high.txt", scores, MAX_HIGHSCORES);
+    LoadControlMap("control.bin", controlKeys, CONTROL_MAX);
+
     lastGameScore = 0;
 
     // Setup and init first screen
@@ -154,6 +157,9 @@ int main(void)
         default: break;
     }
 
+    WriteHigscores("high.txt", scores, MAX_HIGHSCORES);
+    WriteControlMap("control.bin", controlKeys, CONTROL_MAX);
+
     // Unload global data loaded
     UnloadFont(smallFont);
     
@@ -180,6 +186,7 @@ static void ChangeToScreen(GameScreen screen)
     {
         case SCREEN_LOGO: UnloadLogoScreen(); break;
         case SCREEN_TITLE: UnloadTitleScreen(); break;
+        case SCREEN_OPTIONS: UnloadOptionsScreen(); break;
         case SCREEN_GAMEPLAY: UnloadGameplayScreen(); break;
         case SCREEN_ENDING: UnloadEndingScreen(); break;
         default: break;
@@ -190,6 +197,7 @@ static void ChangeToScreen(GameScreen screen)
     {
         case SCREEN_LOGO: InitLogoScreen(); break;
         case SCREEN_TITLE: InitTitleScreen(); break;
+        case SCREEN_OPTIONS: UnloadOptionsScreen(); break;
         case SCREEN_GAMEPLAY: InitGameplayScreen(); break;
         case SCREEN_ENDING: InitEndingScreen(); break;
         default: break;
@@ -237,6 +245,7 @@ static void UpdateTransition(void)
             {
                 case SCREEN_LOGO: InitLogoScreen(); break;
                 case SCREEN_TITLE: InitTitleScreen(); break;
+                case SCREEN_OPTIONS: InitOptionsScreen(); break;
                 case SCREEN_GAMEPLAY: InitGameplayScreen(); break;
                 case SCREEN_ENDING: InitEndingScreen(); break;
                 default: break;
