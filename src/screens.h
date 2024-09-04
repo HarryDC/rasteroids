@@ -29,15 +29,32 @@
 //----------------------------------------------------------------------------------
 // Types and Structures Definition
 //----------------------------------------------------------------------------------
-typedef enum GameScreen { UNKNOWN = -1, LOGO = 0, TITLE, OPTIONS, GAMEPLAY, ENDING, SCREENS_COUNT } GameScreen;
+typedef enum GameScreen { 
+    SCREEN_UNKOWN = -1, 
+    SCREEN_LOGO = 0, 
+    SCREEN_TITLE, 
+    SCREEN_OPTIONS, 
+    SCREEN_GAMEPLAY, 
+    SCREEN_ENDING, 
+    SCREEN_MAX } GameScreen;
 
 typedef enum Sounds {
     SOUND_BANG_LARGE, SOUND_BANG_MEDIUM, SOUND_BANG_SMALL, 
     SOUND_BEAT_1, SOUND_BEAT_2,
     SOUND_EXTRA_SHIP, SOUND_FIRE, 
     SOUND_SAUCER_LARGE, SOUND_SAUCER_SMALL,
-    SOUND_THRUST, NUM_SOUNDS
+    SOUND_THRUST, SOUND_MAX
 } Sounds;
+
+typedef enum Controls{
+    CONTROL_LEFT,
+    CONTROL_RIGHT,
+    CONTROL_THRUST,
+    CONTROL_FIRE,
+    CONTROL_HYPERSPACE,
+    CONTROL_MAX,
+} Keys;
+
 
 
 //----------------------------------------------------------------------------------
@@ -46,10 +63,11 @@ typedef enum Sounds {
 extern GameScreen currentScreen;
 extern Font smallFont;
 extern Font largeFont;
-extern Sound sounds[NUM_SOUNDS];
-
-
+extern Sound sounds[SOUND_MAX];
+extern int controlKeys[CONTROL_MAX];
 extern int lastGameScore;
+
+
 
 #ifdef __cplusplus
 extern "C" {            // Prevents name mangling of functions

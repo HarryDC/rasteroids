@@ -32,7 +32,7 @@
 static int framesCounter = 0;
 static int finishScreen = 0;
 
-static char* anyKey = "PUSH ENTER TO START";
+static char* anyKey = "push enter to start\npush <o> for options";
 static Vector2 anyKeyPos = { 0 };
 
 //----------------------------------------------------------------------------------
@@ -57,15 +57,13 @@ void InitTitleScreen(void)
 // Title Screen Update logic
 void UpdateTitleScreen(void)
 {
-    // TODO: Update TITLE screen variables here!
-
-    // Press enter or tap to change to GAMEPLAY screen
-    if (GetKeyPressed() != 0 || IsGestureDetected(GESTURE_TAP) || GetGamepadButtonPressed() != 0)
-    {
-        //finishScreen = 1;   // OPTIONS
-        finishScreen = 2;   // GAMEPLAY
+    int key = GetKeyPressed();
+    if (key == KEY_ENTER) {
+        finishScreen = 2;
     }
-
+    else if (key == KEY_O) {
+        finishScreen = 1;
+    }
 }
 
 // Title Screen Draw logic
@@ -78,7 +76,7 @@ void DrawTitleScreen(void)
 
     DrawHighscores(smallFont, GetScreenHeight() / 3.0f,(float)smallFont.baseSize * 1.05f , 200.0f, scores, MAX_HIGHSCORES);
 
-    DrawTextEx(smallFont, "PUSH ANY KEY TO START", anyKeyPos, (float)smallFont.baseSize, 1.0f, RAYWHITE);
+    DrawTextEx(smallFont, anyKey, anyKeyPos, (float)smallFont.baseSize,1.0, RAYWHITE);
 }
 
 // Title Screen Unload logic

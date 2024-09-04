@@ -54,7 +54,6 @@ Bullets	                    17 (ship at rest)
 */
 
 // Small Saucer brain, have it avoid asteroids
-// Check Highscore page, with highscore, without highscore, check storing of highscore
 // Add pause
 // Fullscreen mode (16:10 Aspect Ratio check ...) 
 // Add Instructions
@@ -279,7 +278,7 @@ enum Input {
     INPUT_RIGHT = 0x2,
     INPUT_THRUST = 0x4,
     INPUT_HYPER = 0x8,
-    INPUT_SHOOT = 0x10,
+    INPUT_FIRE = 0x10,
 };
 
 static int currentInput = 0;
@@ -578,21 +577,21 @@ bool CheckCollisionAsteroids(Vector2 pos, float radius) {
 int UpdateInput()
 {
     int input = 0;
-    // TraceLog(LOG_INFO, "Button: %i", GetGamepadButtonPressed());
-    if (IsKeyDown(KEY_A) || IsGamepadButtonDown(0, 9)) {
+    //TraceLog(LOG_INFO, "Button: %i", GetKeyPressed());
+    if (IsKeyDown(controlKeys[CONTROL_LEFT]) || IsGamepadButtonDown(0, 9)) {
         input = input | INPUT_LEFT;
     }
-    if (IsKeyDown(KEY_D) || IsGamepadButtonDown(0, 11)) {
+    if (IsKeyDown(controlKeys[CONTROL_RIGHT]) || IsGamepadButtonDown(0, 11)) {
         input = input | INPUT_RIGHT;
     }
-    if (IsKeyDown(KEY_S) || IsGamepadButtonDown(0, 3)) {
+    if (IsKeyDown(controlKeys[CONTROL_HYPERSPACE]) || IsGamepadButtonDown(0, 3)) {
         input = input | INPUT_HYPER;
     }
-    if (IsKeyDown(KEY_W) || IsGamepadButtonDown(0, 7)) {
+    if (IsKeyDown(controlKeys[CONTROL_THRUST]) || IsGamepadButtonDown(0, 7)) {
         input = input | INPUT_THRUST;
     }
-    if (IsKeyPressed(KEY_SPACE) || IsGamepadButtonPressed(0, 8)) {
-        input = input | INPUT_SHOOT;
+    if (IsKeyPressed(controlKeys[CONTROL_FIRE]) || IsGamepadButtonPressed(0, 8)) {
+        input = input | INPUT_FIRE;
     }
     return input;
 }
@@ -653,7 +652,7 @@ void UpdateShip(Object* ship) {
         ship->velocity = Vector2ClampValue(ship->velocity, -shipMaxSpeed, shipMaxSpeed);
     }
 
-    if ((input & INPUT_SHOOT) != 0) {
+    if ((input & INPUT_FIRE) != 0) {
         SpawnBullet(0, SHIP_MAX_BULLETS, ship->position, Vector2Scale(fwd, bulletInitialVelocity));
     }
 
@@ -1236,6 +1235,13 @@ void UpdateGameplayScreen(void)
                 ResetLevel();
             }
             else {
+
+                if (GetHighscorePosition(scores, MAX_HIGHSCORES, lastGameScore) < 0)
+                {
+                    // Return to start
+                    finishScreen = 2;
+                }
+                // Got to Highscore entry
                 finishScreen = 1;
             }
         }
@@ -1247,8 +1253,6 @@ void UpdateGameplayScreen(void)
 // Gameplay Screen Draw logic
 void DrawGameplayScreen(void)
 {
-    DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(), BLACK);
-    
     DrawTextEx(smallFont, TextFormat("%i", game.score), (Vector2) { 20, 20 }, (float)smallFont.baseSize, 1.0f,RAYWHITE);
 
     Vector2 pos = { 20, smallFont.baseSize + 1.2f * gameScale };

@@ -23,13 +23,13 @@
 // Shared Variables Definition (global)
 // NOTE: Those variables are shared between modules through screens.h
 //----------------------------------------------------------------------------------
-GameScreen currentScreen = LOGO;
+GameScreen currentScreen = SCREEN_LOGO;
 Font smallFont = { 0 };
 Font largeFont = { 0 };
 
 int lastGameScore = 0;
 
-static char* soundFiles[NUM_SOUNDS] = {
+static char* soundFiles[SOUND_MAX] = {
     "resources/bangLarge.wav",
     "resources/bangMedium.wav",
     "resources/bangSmall.wav",
@@ -42,8 +42,9 @@ static char* soundFiles[NUM_SOUNDS] = {
     "resources/thrust.wav"
 };
 
-Sound sounds[NUM_SOUNDS] = {0};
+Sound sounds[SOUND_MAX] = {0};
 Highscore scores[MAX_HIGHSCORES];
+int controlKeys[CONTROL_MAX] = { 'A', 'D', 'W', ' ', 'S' };
 
 //----------------------------------------------------------------------------------
 // Local Variables Definition (local to this module)
@@ -56,7 +57,35 @@ static float transAlpha = 0.0f;
 static bool onTransition = false;
 static bool transFadeOut = false;
 static int transFromScreen = -1;
-static GameScreen transToScreen = UNKNOWN;
+static GameScreen transToScreen = SCREEN_UNKOWN;
+
+/*
+typedef void (*ScreenCall)();
+static ScreenCall initCalls[SCREEN_MAX] =
+{
+    InitLogoScreen, InitTitleScreen, InitOptionsScreen, InitGameplayScreen, InitEndingScreen
+};
+
+static ScreenCall updateCalls[SCREEN_MAX] =
+{
+    UpdateLogoScreen, UpdateTitleScreen, UpdateOptionsScreen, UpdateGameplayScreen, UpdateEndingScreen
+};
+
+static ScreenCall drawCalls[SCREEN_MAX] =
+{
+    DrawLogoScreen, DrawTitleScreen, DrawOptionsScreen, DrawGameplayScreen, DrawEndingScreen
+};
+
+static ScreenCall finishCalls[SCREEN_MAX] =
+{
+    FinishLogoScreen, FinishTitleScreen, FinishOptionsScreen, FinishGameplayScreen, FinishEndingScreen
+};
+
+static ScreenCall unloadCalls[SCREEN_MAX] =
+{
+    UnloadLogoScreen, UnloadTitleScreen, UnloadOptionsScreen, UnloadGameplayScreen, UnloadEndingScreen
+};
+*/
 
 //----------------------------------------------------------------------------------
 // Local Functions Declaration
@@ -87,16 +116,17 @@ int main(void)
     // font = LoadFont("resources/mecha.png");
     TraceLog(LOG_INFO, "Loading Assets from : %s", GetWorkingDirectory());
     smallFont = LoadFont("resources/Hyperspace.ttf");
+    SetTextLineSpacing(30);
     largeFont = LoadFontEx("resources/Hyperspace.ttf", 72, NULL, 0);
 
-    for (int i = 0; i < NUM_SOUNDS; ++i) {
+    for (int i = 0; i < SOUND_MAX; ++i) {
         sounds[i] = LoadSound(soundFiles[i]);
     }
 
     lastGameScore = 0;
 
     // Setup and init first screen
-    currentScreen = TITLE;
+    currentScreen = SCREEN_TITLE;
     InitTitleScreen();
 
 #if defined(PLATFORM_WEB)
@@ -117,17 +147,17 @@ int main(void)
     // Unload current screen data before closing
     switch (currentScreen)
     {
-        case LOGO: UnloadLogoScreen(); break;
-        case TITLE: UnloadTitleScreen(); break;
-        case GAMEPLAY: UnloadGameplayScreen(); break;
-        case ENDING: UnloadEndingScreen(); break;
+        case SCREEN_LOGO: UnloadLogoScreen(); break;
+        case SCREEN_TITLE: UnloadTitleScreen(); break;
+        case SCREEN_GAMEPLAY: UnloadGameplayScreen(); break;
+        case SCREEN_ENDING: UnloadEndingScreen(); break;
         default: break;
     }
 
     // Unload global data loaded
     UnloadFont(smallFont);
     
-    for (int i = 0; i < NUM_SOUNDS; ++i) {
+    for (int i = 0; i < SOUND_MAX; ++i) {
         UnloadSound(sounds[i]);
     }
 
@@ -148,20 +178,20 @@ static void ChangeToScreen(GameScreen screen)
     // Unload current screen
     switch (currentScreen)
     {
-        case LOGO: UnloadLogoScreen(); break;
-        case TITLE: UnloadTitleScreen(); break;
-        case GAMEPLAY: UnloadGameplayScreen(); break;
-        case ENDING: UnloadEndingScreen(); break;
+        case SCREEN_LOGO: UnloadLogoScreen(); break;
+        case SCREEN_TITLE: UnloadTitleScreen(); break;
+        case SCREEN_GAMEPLAY: UnloadGameplayScreen(); break;
+        case SCREEN_ENDING: UnloadEndingScreen(); break;
         default: break;
     }
 
     // Init next screen
     switch (screen)
     {
-        case LOGO: InitLogoScreen(); break;
-        case TITLE: InitTitleScreen(); break;
-        case GAMEPLAY: InitGameplayScreen(); break;
-        case ENDING: InitEndingScreen(); break;
+        case SCREEN_LOGO: InitLogoScreen(); break;
+        case SCREEN_TITLE: InitTitleScreen(); break;
+        case SCREEN_GAMEPLAY: InitGameplayScreen(); break;
+        case SCREEN_ENDING: InitEndingScreen(); break;
         default: break;
     }
 
@@ -194,21 +224,21 @@ static void UpdateTransition(void)
             // Unload current screen
             switch (transFromScreen)
             {
-                case LOGO: UnloadLogoScreen(); break;
-                case TITLE: UnloadTitleScreen(); break;
-                case OPTIONS: UnloadOptionsScreen(); break;
-                case GAMEPLAY: UnloadGameplayScreen(); break;
-                case ENDING: UnloadEndingScreen(); break;
+                case SCREEN_LOGO: UnloadLogoScreen(); break;
+                case SCREEN_TITLE: UnloadTitleScreen(); break;
+                case SCREEN_OPTIONS: UnloadOptionsScreen(); break;
+                case SCREEN_GAMEPLAY: UnloadGameplayScreen(); break;
+                case SCREEN_ENDING: UnloadEndingScreen(); break;
                 default: break;
             }
 
             // Load next screen
             switch (transToScreen)
             {
-                case LOGO: InitLogoScreen(); break;
-                case TITLE: InitTitleScreen(); break;
-                case GAMEPLAY: InitGameplayScreen(); break;
-                case ENDING: InitEndingScreen(); break;
+                case SCREEN_LOGO: InitLogoScreen(); break;
+                case SCREEN_TITLE: InitTitleScreen(); break;
+                case SCREEN_GAMEPLAY: InitGameplayScreen(); break;
+                case SCREEN_ENDING: InitEndingScreen(); break;
                 default: break;
             }
 
@@ -228,7 +258,7 @@ static void UpdateTransition(void)
             transFadeOut = false;
             onTransition = false;
             transFromScreen = -1;
-            transToScreen = UNKNOWN;
+            transToScreen = SCREEN_UNKOWN;
         }
     }
 }
@@ -246,41 +276,41 @@ static void UpdateDrawFrame(void)
     {
         switch(currentScreen)
         {
-            case LOGO:
+            case SCREEN_LOGO:
             {
                 UpdateLogoScreen();
 
-                if (FinishLogoScreen()) TransitionToScreen(TITLE);
+                if (FinishLogoScreen()) TransitionToScreen(SCREEN_TITLE);
 
             } break;
-            case TITLE:
+            case SCREEN_TITLE:
             {
                 UpdateTitleScreen();
 
-                if (FinishTitleScreen() == 1) TransitionToScreen(OPTIONS);
-                else if (FinishTitleScreen() == 2) TransitionToScreen(GAMEPLAY);
+                if (FinishTitleScreen() == 1) TransitionToScreen(SCREEN_OPTIONS);
+                else if (FinishTitleScreen() == 2) TransitionToScreen(SCREEN_GAMEPLAY);
 
             } break;
-            case OPTIONS:
+            case SCREEN_OPTIONS:
             {
                 UpdateOptionsScreen();
 
-                if (FinishOptionsScreen()) TransitionToScreen(TITLE);
+                if (FinishOptionsScreen()) TransitionToScreen(SCREEN_TITLE);
 
             } break;
-            case GAMEPLAY:
+            case SCREEN_GAMEPLAY:
             {
                 UpdateGameplayScreen();
 
-                if (FinishGameplayScreen() == 1) TransitionToScreen(ENDING);
-                //else if (FinishGameplayScreen() == 2) TransitionToScreen(TITLE);
+                if (FinishGameplayScreen() == 1) TransitionToScreen(SCREEN_ENDING);
+                else if (FinishGameplayScreen() == 2) TransitionToScreen(SCREEN_TITLE);
 
             } break;
-            case ENDING:
+            case SCREEN_ENDING:
             {
                 UpdateEndingScreen();
 
-                if (FinishEndingScreen() == 1) TransitionToScreen(TITLE);
+                if (FinishEndingScreen() == 1) TransitionToScreen(SCREEN_TITLE);
 
             } break;
             default: break;
@@ -293,15 +323,15 @@ static void UpdateDrawFrame(void)
     //----------------------------------------------------------------------------------
     BeginDrawing();
 
-        ClearBackground(RAYWHITE);
+        ClearBackground(BLACK);
 
         switch(currentScreen)
         {
-            case LOGO: DrawLogoScreen(); break;
-            case TITLE: DrawTitleScreen(); break;
-            case OPTIONS: DrawOptionsScreen(); break;
-            case GAMEPLAY: DrawGameplayScreen(); break;
-            case ENDING: DrawEndingScreen(); break;
+            case SCREEN_LOGO: DrawLogoScreen(); break;
+            case SCREEN_TITLE: DrawTitleScreen(); break;
+            case SCREEN_OPTIONS: DrawOptionsScreen(); break;
+            case SCREEN_GAMEPLAY: DrawGameplayScreen(); break;
+            case SCREEN_ENDING: DrawEndingScreen(); break;
             default: break;
         }
 

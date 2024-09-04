@@ -91,8 +91,8 @@ void DrawTextLineCentered(Font font, const char* text, float y, float spacing)
     pos.y = y;
     pos.x = (GetScreenWidth() - pos.x) / 2.0f;
     DrawTextEx(font,text, pos, (float)font.baseSize, 1.0f, WHITE);
-
 }
+
 
 void DrawHighscores(Font font, float top, float lineSpace, float gap, Highscore* scores, int maxScores)
 {

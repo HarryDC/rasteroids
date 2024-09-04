@@ -59,11 +59,6 @@ void InitEndingScreen(void)
 
     editBlinkCurrent = editBlinkInterval;
 
-    if (GetHighscorePosition(scores, MAX_HIGHSCORES, lastGameScore) < 0)
-    {
-        finishScreen = 1;
-    }
-
     availableCharacters[0] = ' ';
     char currentChar = 'A';
     for (int i = 1; i < CHAR_COUNT; ++i, ++currentChar) {
