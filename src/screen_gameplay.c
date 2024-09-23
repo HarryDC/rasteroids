@@ -64,19 +64,24 @@ Bullets	                    17 (ship at rest)
 static int framesCounter = 0;
 static int finishScreen = 0;
 
+
+static const Vector2 yUp = { 0, -1 };
+
 //----------------------------------------------------------------------------------
 // Objects Definition
 //----------------------------------------------------------------------------------
 
-static const Vector2 yUp = { 0, -1 };
-
+// GameObject, every animated thing on the screen is one of these, every frame
+// each active object gets its position and rot updated, and then those are 
+// applied to all the vertices. Which in turn can be drawn, objects that are
+// not active are neither updated nor drawn and do not participate in collision
 typedef struct Object {
     bool active;
     Vector2 position;
     Vector2 velocity;
-    float rot;
-    float rotVel;
-    int vertexCount;
+    float rot;                  // In Degrees
+    float rotVel;               // Degrees per sec
+    int vertexCount;            // Amount of vertices in initialVertices and vertices
     Vector2* initialVertices;   // Not Owned here
     Vector2* vertices;          // Owned by the object
     int type;                   // type of data, allows cast
@@ -90,7 +95,7 @@ static Object gameobjects[MAX_GAME_OBJECTS] = { 0 };
 // Ship Definitions
 //----------------------------------------------------------------------------------
 
-// Nominally 1 long
+// Ship vertex data (a simple triangle) for size and scaling the ship is 1 unit long
 static Vector2 shipVertices[4] = {
     {-0.25f, 0.5f},
     {0.0f, -0.5f},
@@ -99,6 +104,7 @@ static Vector2 shipVertices[4] = {
 };
 static int shipVertexCount = 4;
 
+// Graphics for powered engines
 static Vector2 shipThrustVertices[2][3] = {
 {
     {-0.20f, 0.6f + 0.25f},
@@ -110,17 +116,20 @@ static Vector2 shipThrustVertices[2][3] = {
     {0.0, 0.9f},
     {0.20f, 0.9f + 0.25f}
 },
-
 };
 static int shipThrustVertexCount = 3;
 
-static float shipRotationFactor = 2.0f;
-static float shipAccelrationFactor = .2f;
-static float shipDecelrationFactor = .995f;
+// Static values that drive the ship behavior
+static float shipAccelerationFactor = .2f;      // Used under thrust
+static float shipRotationFactor = 2.0f;         // Used when the player turns 
+static float shipDecelerationFactor = .995f;    // Slows down the ship
 static float shipMaxSpeed = 14.0f;
-static float shipSpeedCutoff = 0.05f;
+static float shipSpeedCutoff = 0.05f;           // When ship is slower than this, stop it
+
 // Ship is supposed to be 40 px on a fixed 1024 screen
 // Model is 1 unit long => GameScale = 40
+// This affects ALL values and can be used to move the game to a different sized screen 
+// while maintaining the same relative sizes
 static float gameScale = 40;
 
 static Vector2 shipDebrisVertices[2] = {
@@ -129,11 +138,14 @@ static Vector2 shipDebrisVertices[2] = {
 };
 static int shipDebrisVertexCount = 2;
 
-static int nextShipInterval = 5000;
-static int nextShip = 5000;
-static int nextHyperSpaceInverval = 2500;
-static int nextHyperspace = 2500;
+// If the score is larger than threshold, gain one, then increase threshold
+// by distance
+static int nextShipInterval = 5000;         // Distance to next free ship
+static int nextShip = 5000;                 // Threshold for next free ship
+static int nextHyperSpaceInverval = 2500;   // Distance to next hyperspace
+static int nextHyperspace = 2500;           // Threshold for hyperspace
 
+// Contains all the objects of a ship
 typedef struct Ship {
     Object* ship;
     Object* thrust[2];
@@ -161,6 +173,7 @@ static const int bulletVertexCount = 5;
 #define SAUCER_MAX_BULLETS 5
 #define SHIP_MAX_BULLETS 5
 #define MAX_BULLETS SAUCER_MAX_BULLETS + SHIP_MAX_BULLETS
+
 typedef struct Bullet {
     Object* object;
     float lifetime;
@@ -168,7 +181,7 @@ typedef struct Bullet {
 
 static Bullet bullets[MAX_BULLETS] = { 0 };
 
-static float bulletInitialLifetime = 3.0f; // seconds
+static float bulletInitialLifetime = 3.0f;  // Lifetime in seconds
 static float bulletInitialVelocity = 14.0f;
 
 //----------------------------------------------------------------------------------
@@ -197,11 +210,12 @@ static Vector2 asteroidVerticesLarge[11] = {
     {0.5f, 1.2f},
     {-0.5f, 1.2f}
 };
+static int asteroidVertexCount = 11;
 
+// Static data for different sized vertices, will be initialized at start 
 static Vector2 asteroidVerticesMedium[11] = { 0 };
 static Vector2 asteroidVerticesSmall[11] = { 0 };
  
-static int asteroidVertexCount = 11;
 
 enum {
     ASTEROID_SIZE_LARGE,
@@ -217,11 +231,11 @@ static Vector2* asteroidData[ASTEROID_SIZE_NUM] = {
 };
 
 static float asteroidVelocity[ASTEROID_SIZE_NUM] = { 4, 5, 6 };
-static float asteroidRadius[ASTEROID_SIZE_NUM] = { 1.2f, 0.6f, 0.3f};
+static float asteroidRadius[ASTEROID_SIZE_NUM] = { 1.2f, 0.6f, 0.3f};   // Used in collision
 
-static int maxLevelAsteroids = 8;
-static int startingAsteroids = 2;
-static float levelSpeedIncrease = 0.1f;
+static int maxAsteroids = 8;                // Each level adds asteroids, this is the max
+static int startingAsteroids = 2;           // Starting number of asteroids
+static float levelSpeedIncrease = 0.1f;     // Gets multiplied with level and added to speed for each new asteroid
 
 //----------------------------------------------------------------------------------
 // Saucer Definition
@@ -250,15 +264,13 @@ enum {
     SAUCER_SIZE_SMALL
 };
 
-
-
 typedef struct Saucer {
     Object* object;
     int type;
     int maxBullets;
     float shotFreq;
-    float toShootTime; // time since last shot
-    float toNextActionTime;
+    float toShootTime;      // Counts down for next shot
+    float toNextActionTime; // Counts down for next course change
 } Saucer;
 
 static float saucerSpawnFrequency = 5.0f;
@@ -268,20 +280,22 @@ static float saucerActionTime = 3.0f;
 Saucer saucer;
 
 //----------------------------------------------------------------------------------
-// Game global Definition
+// Game Definition
 //---------------------------------------------------------------------------------- 
 
-enum Input {
-    INPUT_NONE,
-    INPUT_LEFT = 0x1,
-    INPUT_RIGHT = 0x2,
-    INPUT_THRUST = 0x4,
-    INPUT_HYPER = 0x8,
-    INPUT_FIRE = 0x10,
+// Used to map any inputs into actions 
+enum Action {
+    ACTION_NONE,
+    ACTION_LEFT = 0x1,
+    ACTION_RIGHT = 0x2,
+    ACTION_THRUST = 0x4,
+    ACTION_HYPER = 0x8,
+    ACTION_FIRE = 0x10,
 };
 
 static int currentInput = 0;
 
+// Drives the display and game flow
 enum GameState {
     LEVEL_START,
     LEVEL_DONE,
@@ -301,20 +315,25 @@ enum Enemies {
     MAX_TYPES = 7
 };
 
+// Translates "local" enums to the main types
 static int asteroidSizeToObject[3] = { ASTEROID_LARGE, ASTEROID_MEDIUM, ASTEROID_SMALL };
 static int saucerSizeToObject[2] = { SAUCER_LARGE, SAUCER_SMALL };
 
 typedef struct Game {
     int score;
-    int lives;
-    int hyperspace;
-    int level;
-    int state;
-    float dt;
-    float stateTime;
+    int lives;          // current number of lives
+    int hyperspace;     // current number of jumps
+    int level;          // current level
+    int state;          // current GameState
+    float dt;           // dt 
+    float stateTime;    // time spent in current state
 } Game;
 
 Game game;
+
+//----------------------------------------------------------------------------------
+// Sound Definition
+//---------------------------------------------------------------------------------- 
 
 typedef struct BackgroundSound {
     float elapsed;
@@ -323,6 +342,10 @@ typedef struct BackgroundSound {
 } BackgroundSound;
 
 BackgroundSound sound;
+
+//----------------------------------------------------------------------------------
+// Particle system Definition
+//---------------------------------------------------------------------------------- 
 
 typedef struct Particle {
     Vector2 position;
@@ -338,8 +361,6 @@ typedef struct ParticleSystem {
 } ParticleSystem;
 
 ParticleSystem particleSystem;
-
-
 
 //----------------------------------------------------------------------------------
 // Gameobject Stack
@@ -372,16 +393,21 @@ Object* StackPop(Stack* stack) {
     }
 }
 
-// Assumes stack and objects have the same size 
-void StackInit(Stack *stack, Object objects[]) {
+// Assumes stack and objects have the same size, initializes
+// the stack with the objects from 
+void StackInit(Stack *stack, Object objects[], int numObjects) {
     stack->size = MAX_GAME_OBJECTS;
+    if (numObjects > MAX_GAME_OBJECTS) {
+        TraceLog(LOG_FATAL, "Trying to initialize the stack with more objects than available.");
+    }
     for (int i = stack->size-1; i >= 0; --i) {
         objects[i] = (Object){ 0 };
         StackPush(stack, &objects[i]);
     }
 }
 
-// Conservative Reinitialization
+// Initializes an object, will allocate new space if there was none, 
+// or if the new object needs more space for vertices
 void ObjectInit(Object* obj, Vector2* initialVertices, int vertexCount)
 {
     if (obj == NULL) {
@@ -393,7 +419,6 @@ void ObjectInit(Object* obj, Vector2* initialVertices, int vertexCount)
         return;
     }
 
-    free(obj->vertices);
     *obj = (Object){ 0 };
     obj->initialVertices = initialVertices;
     if (obj->vertices == NULL || vertexCount > obj->vertexCount) {
@@ -403,12 +428,13 @@ void ObjectInit(Object* obj, Vector2* initialVertices, int vertexCount)
     obj->vertexCount = vertexCount;
 }
 
-
+// Used when changing game state
 void SetState(int state) {
     game.state = state;
     game.stateTime = 0;
 }
 
+// Adds the score for one specific object that was destroyed
 void AddScore(int type) {
     static int scores[MAX_TYPES] = { -1, 100, 50, -1, 20, 200, 1000 };
     if (type > 0 && type < MAX_TYPES) {
@@ -419,6 +445,7 @@ void AddScore(int type) {
     }
 }
 
+// Generate a random position on the edge of the screen
 Vector2 GetRandomEdgePosition() {
     // Start from a border
     int sector = GetRandomValue(0, 3);
@@ -447,6 +474,7 @@ inline static float GetRandomAngleRad(int degrees)
 //----------------------------------------------------------------------------------
 // ParticleSystem Functions
 //----------------------------------------------------------------------------------
+
 void InitParticleSystem(ParticleSystem* system) {
     for (int i = 0; i < MAX_PARTICLES; ++i) {
         system->particles[i].lifetime = -1;
@@ -454,6 +482,8 @@ void InitParticleSystem(ParticleSystem* system) {
     system->back = -1;
 }
 
+// Adds a particle at a give position and velocity, particles fill up from the 
+// back like a stack
 bool AddParticle(ParticleSystem *system, Vector2 pos, Vector2 vel, float lifetime) {
     if (system->back < MAX_PARTICLES - 1) {
         ++system->back;
@@ -463,6 +493,8 @@ bool AddParticle(ParticleSystem *system, Vector2 pos, Vector2 vel, float lifetim
     return false;
 }
 
+// Updates particle position and lifetime, when a particle dies
+// move the last one in the stack 
 void UpdateParticles(ParticleSystem* system, float dt) {
 
     int i = 0;
@@ -488,10 +520,12 @@ void DrawParticles(ParticleSystem* system) {
     }
 }
 
+// Creates a particle explosion at the given position
 void SpawnExplosion(ParticleSystem* system, Vector2 pos, int count) {
     for (int i = 0; i < count; ++i) {
         int angle = GetRandomValue(0, 360);
-        Vector2 vel = Vector2Scale(Vector2Rotate(yUp, angle * PI / 180.0f), 0.5f);
+        float speed = (float)GetRandomValue(25, 75) / 100.0f;
+        Vector2 vel = Vector2Scale(Vector2Rotate(yUp, angle * PI / 180.0f), speed);
         if (!AddParticle(system, pos, vel, 2.5)) {
             TraceLog(LOG_WARNING,"Out of Particles");
             return;
@@ -524,7 +558,6 @@ void SpawnBullet(int low, int high, Vector2 pos, Vector2 vel) {
 void UpdateBullets() {
     for (int i = 0; i < MAX_BULLETS; ++i) {
         bullets[i].lifetime = Clamp(bullets[i].lifetime - game.dt, -1.0f, 999.0f);
-
         if (bullets[i].lifetime <= 0.0) {
             Object* obj = bullets[i].object;
             obj->active = false;
@@ -547,6 +580,7 @@ void ResetShip() {
     ship->rotVel = 0;
 }
 
+// Clear all bullets 
 void ResetBullets() {
     for (int i = 0; i < MAX_BULLETS; ++i) {
         Bullet* bullet = &bullets[i];
@@ -556,58 +590,63 @@ void ResetBullets() {
     }
 }
 
+// Clear the fragments from a ship explosion
 void ResetFragments() {
     for (int i = 0; i < parts.debrisCount; ++i) {
         parts.debris[i]->active = false;
     }
 }
 
+// Used when jumping in hyperspace so you don't materialize 
+// inside an asteroid, uses a bit bigger radius than the normal collision
 bool CheckCollisionAsteroids(Vector2 pos, float radius) {
     for (int i = MAX_ASTEROIDS - 1; i >= 0; --i) {
         Asteroid* asteroid = &asteroids[i];
         if (asteroid->object == NULL ) continue;
-        if (CheckCollisionCircles(pos, radius * gameScale, asteroid->object->position, asteroidRadius[asteroid->size] * gameScale)) {
+        if (CheckCollisionCircles(pos, radius * gameScale, asteroid->object->position, asteroidRadius[asteroid->size] * gameScale * 1.2f)) {
             return true;
         }
     }
     return false; 
 }
 
+// Read the input in translate it to the appropriate action
+// This allows to read input from multiple sources but process 
+// through one loop
 int UpdateInput()
 {
     int input = 0;
     //TraceLog(LOG_INFO, "Button: %i", GetKeyPressed());
     if (IsKeyDown(controlKeys[CONTROL_LEFT]) || IsGamepadButtonDown(0, 9)) {
-        input = input | INPUT_LEFT;
+        input = input | ACTION_LEFT;
     }
     if (IsKeyDown(controlKeys[CONTROL_RIGHT]) || IsGamepadButtonDown(0, 11)) {
-        input = input | INPUT_RIGHT;
+        input = input | ACTION_RIGHT;
     }
     if (IsKeyDown(controlKeys[CONTROL_HYPERSPACE]) || IsGamepadButtonDown(0, 3)) {
-        input = input | INPUT_HYPER;
+        input = input | ACTION_HYPER;
     }
     if (IsKeyDown(controlKeys[CONTROL_THRUST]) || IsGamepadButtonDown(0, 7)) {
-        input = input | INPUT_THRUST;
+        input = input | ACTION_THRUST;
     }
     if (IsKeyPressed(controlKeys[CONTROL_FIRE]) || IsGamepadButtonPressed(0, 8)) {
-        input = input | INPUT_FIRE;
+        input = input | ACTION_FIRE;
     }
     return input;
 }
 
-
 // React to user input, calculate new orientation, spawn bullets
 void UpdateShip(Object* ship) {
     int input = UpdateInput();
-    if ((input & INPUT_LEFT) != 0)
+    if ((input & ACTION_LEFT) != 0)
     {
         ship->rot -= shipRotationFactor;
     }
-    if ((input & INPUT_RIGHT) != 0) {
+    if ((input & ACTION_RIGHT) != 0) {
         ship->rot += shipRotationFactor;
     }
 
-    if ( ((input & INPUT_HYPER) != 0) && game.hyperspace > 0) {
+    if ( ((input & ACTION_HYPER) != 0) && game.hyperspace > 0) {
         SetState(HYPERSPACE);
         // Calculate new position for ship, trying to get a bit of 
         // distance from any asteroids
@@ -621,11 +660,11 @@ void UpdateShip(Object* ship) {
 
     ship->rot = Wrap(ship->rot, 0, 360);
 
-    ship->velocity = Vector2Scale(ship->velocity, shipDecelrationFactor);
+    ship->velocity = Vector2Scale(ship->velocity, shipDecelerationFactor);
 
     Vector2 fwd = Vector2Rotate(yUp, ship->rot * PI / 180.0f);
     Vector2 accell = Vector2Scale(fwd, .1f);
-    if ((input & INPUT_THRUST) != 0) {
+    if ((input & ACTION_THRUST) != 0) {
         ship->velocity = Vector2Add(ship->velocity, accell);
 
         for (int i = 0; i < parts.thrustCount; ++i) {
@@ -648,15 +687,15 @@ void UpdateShip(Object* ship) {
         ship->velocity = Vector2Zero();
     }
     else {
-        ship->velocity = Vector2ClampValue(ship->velocity, -shipMaxSpeed, shipMaxSpeed);
+        ship->velocity = Vector2ClampValue(ship->velocity, 0, shipMaxSpeed);
     }
 
-    if ((input & INPUT_FIRE) != 0) {
+    if ((input & ACTION_FIRE) != 0) {
         SpawnBullet(0, SHIP_MAX_BULLETS, ship->position, Vector2Scale(fwd, bulletInitialVelocity));
     }
-
 }
 
+// Breaks the ship into debris parts floating around on the screen
 void BreakShip(ShipParts* parts) {
     PlaySound(sounds[SOUND_BANG_MEDIUM]);
     parts->ship->active = false;
@@ -664,7 +703,7 @@ void BreakShip(ShipParts* parts) {
         Object* obj = parts->debris[i];
         obj->active = true;
         obj->position = parts->ship->vertices[i];
-        obj->velocity = Vector2Scale(Vector2Subtract(obj->position, parts->ship->position), 0.01f);
+        obj->velocity = Vector2Scale(Vector2Subtract(obj->position, parts->ship->position), (float)GetRandomValue(10, 20) * 0.001f);
         obj->rot = (float)GetRandomValue(0, 360);
         obj->rotVel = (float)GetRandomValue(0, 200) / 100.0f;
     }
@@ -715,6 +754,8 @@ void AddAsteroid() {
     obj->rotVel = (float)GetRandomValue(-100, 100) / 200.0f;
 }
 
+// Used when an asteroid is hit, breaks it into smaller pieces
+// or removes it from the game, also plays sound and scores accordingly
 void BreakAsteroid(Asteroid* asteroid) {
     SpawnExplosion(&particleSystem, asteroid->object->position, 5);
 
@@ -779,6 +820,7 @@ void ResetAsteroids() {
     }
 }
 
+// Use for debugging to show asteroid collision regions
 void DrawAsteroidCollisions() {
     for (int i = 0; i < MAX_ASTEROIDS; ++i) {
         if (asteroids[i].object != NULL) {
@@ -823,6 +865,8 @@ void SpawnSaucer(int type) {
 }
 
 // Source https://gamedev.net/forums/topic/401165-target-prediction-system--target-leading
+// Code to calculate the correct vector to hit a moving target from a moving platform
+// works ok-ish
 float largest_root_of_quadratic_equation(float A, float B, float C) {
     return (B + sqrtf(B * B - 4 * A * C)) / (2 * A);
 }
@@ -849,6 +893,8 @@ void BreakSaucer() {
     PlaySound(sounds[SOUND_BANG_MEDIUM]);
 }
 
+
+// Picks a target when the saucer is the big version
 Object* LargeSaucerSelectTarget() {
     int count = CountAsteroids();
 
@@ -871,6 +917,7 @@ Object* LargeSaucerSelectTarget() {
     return target;
 }
 
+// Picks a target when the saucer is the small version
 Object* SmallSaucerSelectTarget() {
     if (GetRandomValue(0, 100) > 10) {
         return parts.ship;
@@ -880,6 +927,7 @@ Object* SmallSaucerSelectTarget() {
     }
 }
 
+// Shoots at a selected target from the saucer
 void ShootSaucer(Object* shooter, Object* target, float bulletVelocity) {
     Vector2 p = intercept(shooter->position, bulletVelocity, target->position, target->velocity);
     Vector2 bulletVel = shoot_at(shooter->position, p, bulletVelocity);
@@ -888,6 +936,7 @@ void ShootSaucer(Object* shooter, Object* target, float bulletVelocity) {
     PlaySound(sounds[SOUND_FIRE]);
 }
 
+// Moves the large saucer
 void LargeSaucerUpdate() {
     if (saucer.toNextActionTime < 0) {
         float angle = GetRandomAngleRad(90);
@@ -896,6 +945,7 @@ void LargeSaucerUpdate() {
     }
 }
 
+// Moves the small saucer
 void SmallSaucerUpdate() {
     if (saucer.toNextActionTime < 0) {
         float angle = GetRandomAngleRad(90);
@@ -906,12 +956,16 @@ void SmallSaucerUpdate() {
 
 void UpdateSaucer() {
     static int soundIds[2] = { SOUND_SAUCER_LARGE, SOUND_SAUCER_SMALL };
+
+    // Rather than using case statements to switch between the two types use function
+    // tables to modify the behavior for each type of saucer
     typedef Object* (*ShootFunc)();
     static ShootFunc targetFunc[2] = { LargeSaucerSelectTarget, SmallSaucerSelectTarget};
     
     typedef void (*UpdateFunc)();
     static UpdateFunc updateFunc[2] = { LargeSaucerUpdate, SmallSaucerUpdate };
 
+    // When this hits zero, a new saucer may spawn or an existing one may change course
     saucer.toNextActionTime -= game.dt;
 
     Object* obj = saucer.object;
@@ -951,7 +1005,8 @@ void UpdateSaucer() {
 // General Functions
 //----------------------------------------------------------------------------------
 
-// Returns true if ship was destroyed
+// Checks for collisions between a variety of objects
+// will return true if the ship was hit
 bool CheckCollisions() {
 
     Object* ship = parts.ship;
@@ -982,7 +1037,7 @@ bool CheckCollisions() {
                 continue;
         }
 
-        // Check Collision of Asteroid w/ ship bullets
+        // Check Collision of Asteroid w/ bullets
         for (int j = 0; j < MAX_BULLETS; ++j) {
             Object* bObj = bullets[j].object;
             if (!bObj->active) continue;
@@ -998,6 +1053,7 @@ bool CheckCollisions() {
     }
 
     if (saucerObj->active) {
+        // Check collision of ship w/ saucer
         if (CheckCollisionCircles(ship->position, 0.5f * gameScale, saucerObj->position, 0.7f * gameScale)) {
             TraceLog(LOG_INFO, "Ship hit saucer");
             BreakShip(&parts);
@@ -1033,6 +1089,8 @@ bool CheckCollisions() {
     return false;
 }
 
+// Apply velocity and rotation velocity, and transform the vertices into the correct
+// position for drawing
 void UpdateGameObjects() {
     Object* obj = &gameobjects[0];
     for (int i = 0; i < MAX_GAME_OBJECTS; ++i, ++obj) {
@@ -1061,9 +1119,12 @@ void UpdateBackgroundSound() {
         sound.beat = (sound.beat == SOUND_BEAT_1) ? SOUND_BEAT_2 : SOUND_BEAT_1;
     }
 }
+
 //----------------------------------------------------------------------------------
 // Levels
 //----------------------------------------------------------------------------------
+
+// When all asteroids are gone and the saucer is destroyed the level is finished
 bool IsLevelDone() {
     for (int i = 0; i < MAX_ASTEROIDS; ++i) {
         if (asteroids[i].object != NULL && asteroids[i].object->active == true) {
@@ -1076,13 +1137,13 @@ bool IsLevelDone() {
     return true;
 }
 
+// Reseed a level with asteroids
 void CreateLevel() {
-    int count = (int)Clamp((float)(startingAsteroids + game.level), (float)startingAsteroids, (float)maxLevelAsteroids);
+    int count = (int)Clamp((float)(startingAsteroids + game.level), (float)startingAsteroids, (float)maxAsteroids);
     for (int i = 0; i < count; ++i) {
         AddAsteroid();
     }
 }
-
 
 void NextLevel() {
     game.level += 1;
@@ -1091,7 +1152,6 @@ void NextLevel() {
 void ResetLevel() {
     ResetShip();
     ResetSaucer();
-    gameobjects[0].active = true;
     ResetBullets();
     ResetFragments();
     ResetAsteroids();
@@ -1104,7 +1164,7 @@ void ResetLevel() {
 
 void InitGameplayScreen(void)
 {
-    StackInit(&stack, gameobjects);
+    StackInit(&stack, gameobjects, MAX_GAME_OBJECTS);
     InitParticleSystem(&particleSystem);
 
     game = (Game){ .score = 0, .lives = 3, .hyperspace = 2, .level = -1, .state = LEVEL_START, .stateTime = 0 };
@@ -1141,7 +1201,7 @@ void InitGameplayScreen(void)
         saucerDataSmall[i] = Vector2Scale(saucerDataLarge[i], 0.6f);
     }
 
-
+    // Bullets
     for (int i = 0; i < MAX_BULLETS; ++i) {
         bullets[i] = (Bullet){ 0 };
         bullets[i].object = StackPop(&stack);
@@ -1181,8 +1241,9 @@ void UpdateGameplayScreen(void)
 
     switch (game.state) {
     case LEVEL_START:
+        parts.ship->active = false;
         if (game.stateTime > 3.0) {
-            gameobjects[0].active = true;
+            parts.ship->active = true;
             CreateLevel();
             SetState(RUNNING);
         } 
@@ -1192,7 +1253,7 @@ void UpdateGameplayScreen(void)
         UpdateBackgroundSound();
         if (game.stateTime > .75f) {
             SetState(RUNNING);
-            gameobjects[0].active = true;
+            parts.ship->active = true;
         }
         UpdateSaucer();
         UpdateBullets();
@@ -1237,11 +1298,11 @@ void UpdateGameplayScreen(void)
 
                 if (GetHighscorePosition(scores, MAX_HIGHSCORES, lastGameScore) < 0)
                 {
-                    // Return to start
-                    finishScreen = 2;
+                    finishScreen = 2; // Return to title screen
                 }
-                // Got to Highscore entry
-                finishScreen = 1;
+                else {
+                    finishScreen = 1; // Go to ending scree
+                }
             }
         }
         break;
@@ -1313,8 +1374,6 @@ void UnloadGameplayScreen(void)
     }
 
     stack.current = 0;
-    // TODO: Unload GAMEPLAY screen variables here!
-
     lastGameScore = game.score;
 }
 

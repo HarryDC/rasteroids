@@ -42,8 +42,6 @@ static Vector2 anyKeyPos = { 0 };
 // Title Screen Initialization logic
 void InitTitleScreen(void)
 {
- 
-    // TODO: Initialize TITLE screen variables here!
     framesCounter = 0;
     finishScreen = 0;
 
@@ -67,21 +65,13 @@ void UpdateTitleScreen(void)
 // Title Screen Draw logic
 void DrawTitleScreen(void)
 {
-    // TODO: Draw TITLE screen here!
-    DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(), BLACK);
-
     DrawTextEx(smallFont, TextFormat("%i", lastGameScore), (Vector2) { 20, 20 }, (float)smallFont.baseSize, 1.0f, RAYWHITE);
-
     DrawHighscores(smallFont, GetScreenHeight() / 3.0f,(float)smallFont.baseSize * 1.05f , 200.0f, scores, MAX_HIGHSCORES);
-
     DrawTextEx(smallFont, anyKey, anyKeyPos, (float)smallFont.baseSize,1.0, RAYWHITE);
 }
 
 // Title Screen Unload logic
-void UnloadTitleScreen(void)
-{
-    // TODO: Unload TITLE screen variables here!
-}
+void UnloadTitleScreen(void) {}
 
 // Title Screen should finish?
 int FinishTitleScreen(void)

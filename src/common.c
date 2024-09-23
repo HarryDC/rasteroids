@@ -4,6 +4,7 @@
 #include "raylib.h"
 #include "screens.h"
 
+// Local Function to fill scores with default values
 static void SetDefaultScores(Highscore scores[], int maxScores)
 {
     int high = 15000;
@@ -15,6 +16,7 @@ static void SetDefaultScores(Highscore scores[], int maxScores)
     }
 }
 
+// Loads values for key board input from file into given map array
 void LoadControlMap(const char* fileName, int map[], int maxEntries) {
     int size = 0;
     unsigned char *mapData = LoadFileData(fileName, &size);
@@ -22,6 +24,7 @@ void LoadControlMap(const char* fileName, int map[], int maxEntries) {
         TraceLog(LOG_WARNING, "Could not load control map file %s/%s", GetWorkingDirectory(), fileName);
         return;
     }
+    // Copy into local memory
     if (size == sizeof(int) * maxEntries) {
         int *dataCast = (int*)mapData;
         for (int i = 0; i < maxEntries; ++i) {
@@ -35,10 +38,13 @@ void LoadControlMap(const char* fileName, int map[], int maxEntries) {
     UnloadFileData(mapData);
 }
 
+// Writes values for keyboard input into file
+// SaveFileData already reports errors if this fails
 void WriteControlMap(const char* fileName, int map[], int maxEntries) {
-    SaveFileData(fileName, map, sizeof(int) * maxEntries);
+    bool success = SaveFileData(fileName, map, sizeof(int) * maxEntries);
 }
 
+// Load highscores from file, expects comma separated list of name,score pairs 
 void LoadHigscores(const char* fileName, Highscore scores[], int maxScores) {
     char* highscoreText = LoadFileText(fileName);
     if (highscoreText == 0) {
@@ -66,6 +72,8 @@ void LoadHigscores(const char* fileName, Highscore scores[], int maxScores) {
     UnloadFileText(highscoreText);
 }
 
+// Finds a new scores position in the highscore table, returns -1 if its
+// not a new highscore in the give table
 int GetHighscorePosition(Highscore scores[], int maxScores, int score) {
     int found = -1;
     for (int i = maxScores - 1; i >= 0; --i) {
@@ -77,23 +85,31 @@ int GetHighscorePosition(Highscore scores[], int maxScores, int score) {
     return found;
 }
 
-void AddHighscore(Highscore scores[], int maxScores, int at, char* name, int score)
+// Inserts a new higscore into the highscore table 
+void InsertHighscore(Highscore scores[], int maxScores, int at, char* name, int score)
 {
     if (at < 0 || at >= maxScores) {
-        TraceLog(LOG_WARNING, "Invalid High Score Positoin");
+        TraceLog(LOG_WARNING, "Invalid High Score Position");
+        return;
+    }
+    if (TextLength(name) > 3) {
+        TraceLog(LOG_WARNING, "Name is too long for highscore table '%s'", name);
+        return;
     }
 
-    if (at >= 0) {
-        for (int i = maxScores - 1; i >= at + 1; --i) {
-            TextCopy(scores[i].name, scores[i - 1].name);
-            TextCopy(scores[i].score, scores[i - 1].score);
-        }
+    // Move all entries below 'at' down by one spot, overwriting the
+    // last entry in the table, by going in reverse no temp variables
+    // are needed
+    for (int i = maxScores - 1; i >= at + 1; --i) {
+        TextCopy(scores[i].name, scores[i - 1].name);
+        TextCopy(scores[i].score, scores[i - 1].score);
     }
 
     TextCopy(scores[at].name, name);
     TextCopy(scores[at].score, TextFormat("%i", score));
 }
 
+// Writes Highscores as simple comma separated list
 void WriteHigscores(const char* fileName, Highscore scores[], int maxScores)
 {
     char buffer[1024] = { 0 };
@@ -109,6 +125,7 @@ void WriteHigscores(const char* fileName, Highscore scores[], int maxScores)
     SaveFileText(fileName, buffer);
 }
 
+// Utility function to draw a text line that's centered horizontally on the screen
 void DrawTextLineCentered(Font font, const char* text, float y, float spacing)
 {
     Vector2 pos = MeasureTextEx(font, text, (float)font.baseSize * 1.0f, 1.0f);
@@ -117,7 +134,7 @@ void DrawTextLineCentered(Font font, const char* text, float y, float spacing)
     DrawTextEx(font,text, pos, (float)font.baseSize, 1.0f, WHITE);
 }
 
-
+// Draw the Highscore table
 void DrawHighscores(Font font, float top, float lineSpace, float gap, Highscore* scores, int maxScores)
 {
     Vector2 sizeName = MeasureTextEx(font, "AAA", (float)font.baseSize, 1.0);

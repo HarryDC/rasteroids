@@ -1,14 +1,12 @@
 /*******************************************************************************************
 *
-*   raylib game template
-*
-*   <Game title>
-*   <Game description>
+*   rAsteroids
+*   Asteroids like game using raylib and raylib game template
 *
 *   This game has been created using raylib (www.raylib.com)
 *   raylib is licensed under an unmodified zlib/libpng license (View raylib.h for details)
 *
-*   Copyright (c) 2021 Ramon Santamaria (@raysan5)
+*   Raylib and raylib game template Copyright (c) 2021 Ramon Santamaria (@raysan5)
 *
 ********************************************************************************************/
 
@@ -129,8 +127,8 @@ int main(void)
     lastGameScore = 0;
 
     // Setup and init first screen
-    currentScreen = SCREEN_TITLE;
-    InitTitleScreen();
+    currentScreen = SCREEN_LOGO;
+    InitLogoScreen();
 
 #if defined(PLATFORM_WEB)
     emscripten_set_main_loop(UpdateDrawFrame, 60, 1);

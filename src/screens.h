@@ -1,27 +1,15 @@
-/**********************************************************************************************
+/*******************************************************************************************
 *
-*   raylib - Advance Game template
+*   rAsteroids
+*   Asteroids like game using raylib and raylib game template
 *
-*   Screens Functions Declarations (Init, Update, Draw, Unload)
+*   This game has been created using raylib (www.raylib.com)
+*   raylib is licensed under an unmodified zlib/libpng license (View raylib.h for details)
 *
-*   Copyright (c) 2014-2022 Ramon Santamaria (@raysan5)
+*   Raylib and raylib game template Copyright (c) 2021 Ramon Santamaria (@raysan5)
 *
-*   This software is provided "as-is", without any express or implied warranty. In no event
-*   will the authors be held liable for any damages arising from the use of this software.
-*
-*   Permission is granted to anyone to use this software for any purpose, including commercial
-*   applications, and to alter it and redistribute it freely, subject to the following restrictions:
-*
-*     1. The origin of this software must not be misrepresented; you must not claim that you
-*     wrote the original software. If you use this software in a product, an acknowledgment
-*     in the product documentation would be appreciated but is not required.
-*
-*     2. Altered source versions must be plainly marked as such, and must not be misrepresented
-*     as being the original software.
-*
-*     3. This notice may not be removed or altered from any source distribution.
-*
-**********************************************************************************************/
+********************************************************************************************/
+
 
 #ifndef SCREENS_H
 #define SCREENS_H
@@ -131,7 +119,7 @@ void LoadHigscores(const char* fileName, Highscore scores[], int maxScores);
 void WriteHigscores(const char* fileName, Highscore scores[], int maxScores);
 
 int GetHighscorePosition(Highscore scores[], int maxScores, int score);
-void AddHighscore(Highscore scores[], int maxScores, int at, char* name, int score);
+void InsertHighscore(Highscore scores[], int maxScores, int at, char* name, int score);
 
 void DrawTextLineCentered(Font font, const char* text, float y, float spacing);
 void DrawHighscores(Font font, float top, float lineSpace, float gap, Highscore* scores, int maxScores);

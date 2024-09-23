@@ -74,7 +74,7 @@ void UpdateEndingScreen(void)
     if (cursorPos >= 3) {
         finishScreen = 1;
         int pos = GetHighscorePosition(scores, MAX_HIGHSCORES, lastGameScore);
-        AddHighscore(scores, MAX_HIGHSCORES, pos, inputChars, lastGameScore);
+        InsertHighscore(scores, MAX_HIGHSCORES, pos, inputChars, lastGameScore);
         WriteHigscores("hight.txt", scores, MAX_HIGHSCORES);
         return;
     }
