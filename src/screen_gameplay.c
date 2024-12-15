@@ -27,11 +27,11 @@
 #include "raymath.h"
 #include "screens.h"
 
-#include "malloc.h"
+#include <stdlib.h>
 
 //----------------------------------------------------------------------------------
 // Data: see https://www.retrogamedeconstructionzone.com/2019/10/asteroids-by-numbers.html
-// Resourses: see https://www.classicgaming.cc/classics/asteroids/
+// Resources: see https://www.classicgaming.cc/classics/asteroids/
 //----------------------------------------------------------------------------------
 /*
 Screen Res: 1024x768
@@ -108,12 +108,12 @@ static int shipVertexCount = 4;
 static Vector2 shipThrustVertices[2][3] = {
 {
     {-0.20f, 0.6f + 0.25f},
-    {0.0, 0.6f},
+    {0.0f, 0.6f},
     {0.20f, 0.6f + 0.25f}
 },
 {
     {-0.20f, 0.9f + 0.25f},
-    {0.0, 0.9f},
+    {0.0f, 0.9f},
     {0.20f, 0.9f + 0.25f}
 },
 };
@@ -142,7 +142,7 @@ static int shipDebrisVertexCount = 2;
 // by distance
 static int nextShipInterval = 5000;         // Distance to next free ship
 static int nextShip = 5000;                 // Threshold for next free ship
-static int nextHyperSpaceInverval = 2500;   // Distance to next hyperspace
+static int nextHyperSpaceInterval = 2500;   // Distance to next hyperspace
 static int nextHyperspace = 2500;           // Threshold for hyperspace
 
 // Contains all the objects of a ship
@@ -292,8 +292,6 @@ enum Action {
     ACTION_HYPER = 0x8,
     ACTION_FIRE = 0x10,
 };
-
-static int currentInput = 0;
 
 // Drives the display and game flow
 enum GameState {
@@ -858,7 +856,7 @@ void SpawnSaucer(int type) {
     obj->initialVertices = (type == SAUCER_SIZE_LARGE) ? saucerDataLarge : saucerDataSmall;
     float speed = 4 + (float)game.score / 10000.0f;
     speed = Clamp(speed, 0, 7);
-    obj->velocity = (Vector2Rotate(yUp, GetRandomAngleRad(180)));
+    obj->velocity = (Vector2Rotate(Vector2Scale(yUp, speed), GetRandomAngleRad(180)));
     obj->position = GetRandomEdgePosition();
     obj->rot = 0;
     obj->rotVel = 0;
@@ -939,7 +937,6 @@ void ShootSaucer(Object* shooter, Object* target, float bulletVelocity) {
 // Moves the large saucer
 void LargeSaucerUpdate() {
     if (saucer.toNextActionTime < 0) {
-        float angle = GetRandomAngleRad(90);
         saucer.object->velocity = Vector2Rotate(saucer.object->velocity, PI / 2.0f + GetRandomAngleRad(40));
         saucer.toNextActionTime = saucerActionTime + (float)GetRandomValue(0, (int)saucerActionTime * 10)/10.0f;
     }
@@ -948,7 +945,6 @@ void LargeSaucerUpdate() {
 // Moves the small saucer
 void SmallSaucerUpdate() {
     if (saucer.toNextActionTime < 0) {
-        float angle = GetRandomAngleRad(90);
         saucer.object->velocity = Vector2Rotate(saucer.object->velocity, PI / 2.0f + GetRandomAngleRad(40));
         saucer.toNextActionTime = saucerActionTime + (float)GetRandomValue(0, (int)saucerActionTime * 10)/10.0f;
     }
@@ -978,8 +974,10 @@ void UpdateSaucer() {
         saucer.toShootTime -= game.dt;
         if (saucer.toShootTime < 0) {
             Object* target = targetFunc[saucer.type]();
-            ShootSaucer(saucer.object, target, bulletInitialVelocity);
-            saucer.toShootTime = saucer.shotFreq;
+            if (target != NULL) {
+                ShootSaucer(saucer.object, target, bulletInitialVelocity);
+                saucer.toShootTime = saucer.shotFreq;
+            }
         }
 
     }
@@ -1031,7 +1029,7 @@ bool CheckCollisions() {
         if (saucerObj->active && 
             CheckCollisionCircles(saucerObj->position, 0.7f * gameScale, aObj->position, asteroidRadius[asteroid->size] * gameScale)) {
                 TraceLog(LOG_INFO, "Asteroid hit saucer");
-                BreakSaucer(saucer.object);
+                BreakSaucer();
                 AddScore(asteroidSizeToObject[asteroid->size]);
                 BreakAsteroid(asteroid);
                 continue;
@@ -1066,7 +1064,7 @@ bool CheckCollisions() {
             if (!bObj->active) continue;
             if (CheckCollisionPointCircle(bObj->position, saucerObj->position, 0.7f * gameScale)) {
                 TraceLog(LOG_INFO, "Saucer hit by bullet");
-                BreakSaucer(saucer.object);
+                BreakSaucer();
                 bullets[j].lifetime = -1;
                 bObj->active = false;
             }
@@ -1145,10 +1143,6 @@ void CreateLevel() {
     }
 }
 
-void NextLevel() {
-    game.level += 1;
-}
-
 void ResetLevel() {
     ResetShip();
     ResetSaucer();
@@ -1156,6 +1150,12 @@ void ResetLevel() {
     ResetFragments();
     ResetAsteroids();
     SetState(LEVEL_START);
+}
+
+
+void NextLevel() {
+    game.level += 1;
+    ResetLevel();
 }
 
 //----------------------------------------------------------------------------------
@@ -1182,7 +1182,7 @@ void InitGameplayScreen(void)
         ObjectInit(parts.debris[i], shipDebrisVertices, shipDebrisVertexCount);;
     }
 
-    // Thust Graphics
+    // Thrust Graphics
     parts.thrustCount = 2;
     for (int i = 0; i < parts.thrustCount; ++i) {
         parts.thrust[i] = StackPop(&stack);
@@ -1236,7 +1236,7 @@ void UpdateGameplayScreen(void)
 
     if (game.score > nextHyperspace) {
         game.hyperspace += 1;
-        nextHyperspace += nextHyperSpaceInverval;
+        nextHyperspace += nextHyperSpaceInterval;
     }
 
     switch (game.state) {
@@ -1283,7 +1283,7 @@ void UpdateGameplayScreen(void)
         UpdateBullets();
         if (game.stateTime > 2.0f) {
             NextLevel();
-            SetState(RUNNING);
+            SetState(LEVEL_START);
         }
         break;
     case DYING:
